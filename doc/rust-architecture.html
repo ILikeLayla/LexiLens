@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LexiLens</title>
+  <meta name="color-scheme" content="dark">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #07111f;
+      --bg-soft: rgba(11, 23, 41, 0.74);
+      --panel: rgba(10, 20, 36, 0.8);
+      --panel-strong: rgba(14, 27, 46, 0.94);
+      --border: rgba(148, 163, 184, 0.18);
+      --border-strong: rgba(125, 211, 252, 0.3);
+      --text: #e5eefb;
+      --muted: #8fa6c2;
+      --violet: #c084fc;
+      --sky: #67e8f9;
+      --emerald: #34d399;
+      --amber: #fbbf24;
+      --shadow: 0 24px 80px rgba(2, 6, 23, 0.55);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      position: relative;
+      font-family: 'JetBrains Mono', monospace;
+      background:
+        radial-gradient(circle at top left, rgba(103, 232, 249, 0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(192, 132, 252, 0.18), transparent 30%),
+        linear-gradient(180deg, #06101d 0%, #0a1220 45%, #07111f 100%);
+      min-height: 100vh;
+      padding: 2rem;
+      color: var(--text);
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
+      pointer-events: none;
+    }
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .hero {
+      background: linear-gradient(145deg, rgba(10, 20, 36, 0.92), rgba(8, 17, 31, 0.72));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      margin-bottom: 1.5rem;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.45rem 0.8rem;
+      border-radius: 999px;
+      border: 1px solid rgba(103, 232, 249, 0.22);
+      background: rgba(12, 27, 43, 0.72);
+      color: var(--sky);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .header {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.9fr);
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .header-copy { max-width: 760px; }
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.8rem;
+    }
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: linear-gradient(135deg, var(--violet), var(--sky));
+      border-radius: 50%;
+      box-shadow: 0 0 22px rgba(103, 232, 249, 0.55);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 50% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+    h1 {
+      font-size: clamp(2rem, 3vw, 2.9rem);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.045em;
+      text-wrap: balance;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.8;
+      max-width: 58ch;
+      margin-left: 1.75rem;
+    }
+    .hero-panel {
+      background: linear-gradient(180deg, rgba(11, 22, 38, 0.9), rgba(9, 18, 31, 0.72));
+      border: 1px solid rgba(192, 132, 252, 0.16);
+      border-radius: var(--radius-lg);
+      padding: 1.2rem;
+    }
+    .hero-panel-label {
+      color: var(--sky);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.6rem;
+    }
+    .hero-panel p {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.7;
+    }
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .stat {
+      padding: 0.85rem 0.9rem;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .stat strong {
+      display: block;
+      color: var(--text);
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+    }
+    .stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.68rem;
+      line-height: 1.5;
+    }
+    .section-title {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.45rem;
+      margin: 0 0 1rem;
+    }
+    .section-title h2 {
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--sky);
+    }
+    .section-title p {
+      color: var(--muted);
+      font-size: 0.76rem;
+      max-width: 62ch;
+      text-align: left;
+    }
+    .diagram-container {
+      position: relative;
+      background: linear-gradient(180deg, rgba(10, 20, 36, 0.92), rgba(8, 16, 29, 0.92));
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-strong);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      overflow-x: auto;
+    }
+    .diagram-container::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(103, 232, 249, 0.05), transparent 24%, transparent 76%, rgba(192, 132, 252, 0.05));
+      pointer-events: none;
+    }
+    svg { width: 100%; min-width: 1050px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-top: 2rem;
+    }
+    .card {
+      position: relative;
+      background: linear-gradient(180deg, rgba(12, 24, 40, 0.9), rgba(8, 17, 30, 0.88));
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      padding: 1.35rem;
+      box-shadow: 0 16px 40px rgba(2, 6, 23, 0.32);
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.4), transparent);
+    }
+    .card-header { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.95rem; }
+    .card-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 18px currentColor; }
+    .card-dot.violet { background: var(--violet); color: var(--violet); }
+    .card-dot.emerald { background: var(--emerald); color: var(--emerald); }
+    .card-dot.amber { background: var(--amber); color: var(--amber); }
+    .card-dot.rose { background: #fb7185; color: #fb7185; }
+    .card-dot.sky { background: #38bdf8; color: #38bdf8; }
+    .card h3 { font-size: 1rem; font-weight: 600; letter-spacing: -0.02em; }
+    .card h4 { font-size: 0.74rem; font-weight: 600; color: var(--muted); margin: 0.9rem 0 0.35rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .card ul { list-style: none; color: var(--muted); font-size: 0.78rem; line-height: 1.7; }
+    .card li { margin-bottom: 0.48rem; }
+    .card strong { color: var(--text); }
+    .card code {
+      color: var(--amber);
+      background: rgba(30, 41, 59, 0.6);
+      padding: 0.08rem 0.32rem;
+      border-radius: 6px;
+      font-size: 0.7rem;
+    }
+    .card pre,
+    .card table,
+    .note {
+      position: relative;
+      z-index: 1;
+    }
+    .code-block {
+      background: rgba(5, 14, 26, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      padding: 0.8rem 0.9rem;
+      border-radius: 14px;
+      color: var(--muted);
+      font-size: 0.66rem;
+      margin-top: 0.45rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+    .terminal-block {
+      color: #f7d774;
+      font-size: 0.68rem;
+      padding: 0.95rem;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 0.15rem;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(5, 14, 26, 0.72);
+    }
+    table.matrix {
+      font-size: 0.64rem;
+      color: var(--muted);
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    table.matrix th,
+    table.matrix td {
+      text-align: left;
+      padding: 0.5rem 0.45rem;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+    table.matrix th {
+      color: var(--text);
+      font-size: 0.66rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    table.matrix tr { border-bottom: 1px solid rgba(30, 41, 59, 0.95); }
+    table.matrix tr:last-child { border-bottom: 0; }
+    .note {
+      color: var(--amber);
+      font-size: 0.7rem;
+      margin-top: 0.8rem;
+      line-height: 1.7;
+      padding: 0.75rem 0.9rem;
+      border-radius: 14px;
+      border: 1px solid rgba(251, 191, 36, 0.18);
+      background: rgba(50, 35, 8, 0.16);
+    }
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #607089;
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+    }
+    @media (max-width: 980px) {
+      body { padding: 1.25rem; }
+      .hero { padding: 1.4rem; }
+      .header { grid-template-columns: 1fr; }
+      .subtitle { margin-left: 0; }
+      .hero-stats { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 700px) {
+      body { padding: 0.85rem; }
+      .hero,
+      .diagram-container,
+      .card { border-radius: 20px; }
+      .header-row { align-items: flex-start; }
+      h1 { font-size: 1.75rem; }
+      .cards { grid-template-columns: 1fr; }
+      .card { padding: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <div class="eyebrow">
+        <span class="pulse-dot"></span>
+        Architecture Snapshot
+      </div>
+      <div class="header">
+        <div class="header-copy">
+          <div class="header-row">
+            <div class="pulse-dot"></div>
+            <h1>LexiLens</h1>
+          </div>
+          <p class="subtitle">Single binary desktop shell with a GPU TTS sidecar, shown as an opinionated runtime map instead of a flat reference sheet.</p>
+        </div>
+        <aside class="hero-panel">
+          <div class="hero-panel-label">Deployment Shape</div>
+          <p>Rust owns the desktop UX and local orchestration. Higgs stays isolated as a separate inference service so the app can run with premium voice quality when the GPU exists, or degrade cleanly when it does not.</p>
+          <div class="hero-stats">
+            <div class="stat">
+              <strong>2</strong>
+              <span>primary processes in the baseline runtime</span>
+            </div>
+            <div class="stat">
+              <strong>24 GB+</strong>
+              <span>recommended VRAM for local Higgs inference</span>
+            </div>
+            <div class="stat">
+              <strong>OpenAI API</strong>
+              <span>compatible TTS endpoint for easy Rust integration</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <div class="section-title">
+      <h2>System Diagram</h2>
+      <p>The structure stays detailed, but the surrounding chrome now separates overview, diagram, and implementation notes more clearly.</p>
+    </div>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1050 880">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrow-white" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#e2e8f0"/>
+          </marker>
+          <marker id="arrow-sky" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8"/>
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- ==================== PROCESS BOUNDARY ==================== -->
+        <rect x="155" y="15" width="580" height="830" rx="14" fill="rgba(167, 139, 250, 0.04)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="168" y="35" fill="#a78bfa" font-size="11" font-weight="700">Process 1 — lexilens (Rust single binary)</text>
+        <text x="168" y="50" fill="#94a3b8" font-size="8"><tspan fill="#a78bfa">cargo run</tspan> → gpui + embedded actix-web + tokio runtime</text>
+
+        <rect x="755" y="15" width="270" height="830" rx="14" fill="rgba(56, 189, 248, 0.04)" stroke="#38bdf8" stroke-width="2"/>
+        <text x="768" y="35" fill="#38bdf8" font-size="11" font-weight="700">Process 2 — Higgs TTS Server</text>
+        <text x="768" y="50" fill="#94a3b8" font-size="8">SGLang-Omni or vLLM-Omni (Python/Docker)</text>
+
+        <!-- ==================== USER ==================== -->
+        <rect x="20" y="330" width="100" height="80" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="70" y="358" fill="white" font-size="13" font-weight="600" text-anchor="middle">Reader</text>
+        <text x="70" y="376" fill="#94a3b8" font-size="9" text-anchor="middle">(Student)</text>
+        <text x="70" y="394" fill="#94a3b8" font-size="8" text-anchor="middle">Desktop</text>
+
+        <!-- ===================================================== -->
+        <!-- RUST PROCESS — tokio runtime                          -->
+        <!-- ===================================================== -->
+        <rect x="170" y="70" width="550" height="35" rx="4" fill="rgba(76, 29, 149, 0.2)" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="445" y="92" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">tokio Runtime (multi-threaded)</text>
+
+        <!-- gpui main thread -->
+        <rect x="175" y="120" width="265" height="45" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="307" y="138" fill="white" font-size="11" font-weight="600" text-anchor="middle">gpui Main Thread (UI Render)</text>
+        <text x="307" y="155" fill="#94a3b8" font-size="8" text-anchor="middle">wgpu GPU · 60 FPS · events → views → models</text>
+
+        <!-- actix-web in background -->
+        <rect x="455" y="120" width="265" height="45" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="587" y="138" fill="white" font-size="11" font-weight="600" text-anchor="middle">actix-web (embedded in tokio)</text>
+        <text x="587" y="155" fill="#94a3b8" font-size="8" text-anchor="middle">localhost random port · OCR + LLM + DB routes</text>
+
+        <!-- ===================================================== -->
+        <!-- gpui: VIEWS                                          -->
+        <!-- ===================================================== -->
+        <rect x="175" y="185" width="265" height="100" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="307" y="205" fill="white" font-size="10" font-weight="600" text-anchor="middle">gpui UI Views</text>
+
+        <rect x="185" y="215" width="120" height="60" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="245" y="233" fill="white" font-size="9" font-weight="600" text-anchor="middle">CameraView</text>
+        <text x="245" y="249" fill="#94a3b8" font-size="7" text-anchor="middle">Live preview</text>
+        <text x="245" y="263" fill="#94a3b8" font-size="7" text-anchor="middle">Capture btn</text>
+
+        <rect x="315" y="215" width="115" height="60" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="372" y="233" fill="white" font-size="9" font-weight="600" text-anchor="middle">ReadingView</text>
+        <text x="372" y="249" fill="#94a3b8" font-size="7" text-anchor="middle">Highlighted text</text>
+        <text x="372" y="263" fill="#94a3b8" font-size="7" text-anchor="middle">Audio sync</text>
+
+        <!-- ===================================================== -->
+        <!-- gpui: MODELS                                        -->
+        <!-- ===================================================== -->
+        <rect x="175" y="305" width="265" height="95" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="307" y="325" fill="white" font-size="10" font-weight="600" text-anchor="middle">gpui Models (Observable State)</text>
+
+        <rect x="185" y="338" width="120" height="52" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="245" y="356" fill="white" font-size="9" text-anchor="middle">CameraModel</text>
+        <text x="245" y="373" fill="#94a3b8" font-size="7" text-anchor="middle">gpui::Model</text>
+
+        <rect x="315" y="338" width="115" height="52" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="372" y="356" fill="white" font-size="9" text-anchor="middle">ReadingModel</text>
+        <text x="372" y="373" fill="#94a3b8" font-size="7" text-anchor="middle">gpui::Model</text>
+
+        <line x1="245" y1="275" x2="245" y2="336" stroke="#a78bfa" stroke-width="0.8"/>
+        <line x1="372" y1="275" x2="372" y2="336" stroke="#a78bfa" stroke-width="0.8"/>
+
+        <!-- ===================================================== -->
+        <!-- SHARED AppState                                       -->
+        <!-- ===================================================== -->
+        <rect x="175" y="420" width="545" height="50" rx="6" fill="rgba(30, 41, 59, 0.3)" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="447" y="438" fill="white" font-size="10" font-weight="600" text-anchor="middle">Arc&lt;AppState&gt; (shared between gpui &amp; actix-web)</text>
+        <text x="447" y="456" fill="#94a3b8" font-size="8" text-anchor="middle">DB pool · LLM client · Higgs TTS HTTP client</text>
+
+        <line x1="307" y1="400" x2="395" y2="418" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="4,2"/>
+        <line x1="587" y1="165" x2="587" y2="418" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="4,2"/>
+
+        <!-- ===================================================== -->
+        <!-- BACKEND SERVICES                                     -->
+        <!-- ===================================================== -->
+        <rect x="175" y="490" width="265" height="155" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="307" y="510" fill="white" font-size="10" font-weight="600" text-anchor="middle">Backend Handlers</text>
+        <text x="307" y="526" fill="#94a3b8" font-size="7" text-anchor="middle">(direct fn call from gpui OR via actix-web)</text>
+
+        <rect x="185" y="540" width="115" height="34" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="242" y="555" fill="#34d399" font-size="8" text-anchor="middle">tokio::spawn_block</text>
+        <text x="242" y="568" fill="#94a3b8" font-size="7" text-anchor="middle">leptess OCR</text>
+
+        <rect x="310" y="540" width="120" height="34" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="370" y="555" fill="#34d399" font-size="8" text-anchor="middle">reqwest / llama-cpp-rs</text>
+        <text x="370" y="568" fill="#94a3b8" font-size="7" text-anchor="middle">LLM restructure</text>
+
+        <rect x="185" y="580" width="115" height="34" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="242" y="595" fill="#34d399" font-size="8" text-anchor="middle">rusqlite</text>
+        <text x="242" y="608" fill="#94a3b8" font-size="7" text-anchor="middle">user prefs + history</text>
+
+        <rect x="310" y="580" width="120" height="34" rx="4" fill="rgba(56, 189, 248, 0.3)" stroke="#38bdf8" stroke-width="1"/>
+        <text x="370" y="595" fill="#38bdf8" font-size="8" text-anchor="middle">reqwest → Higgs TTS</text>
+        <text x="370" y="608" fill="#94a3b8" font-size="7" text-anchor="middle">POST /v1/audio/speech</text>
+
+        <!-- ===================================================== -->
+        <!-- HIGGS TTS SIDE EFFECT (downward)                     -->
+        <!-- ===================================================== -->
+        <path d="M 370 580 Q 370 470 445 470 L 445 490" fill="none" stroke="#38bdf8" stroke-width="1" stroke-dasharray="4,2"/>
+
+        <!-- ===================================================== -->
+        <!-- HIGGS TTS SERVER PROCESS                              -->
+        <!-- ===================================================== -->
+        <rect x="770" y="120" width="240" height="50" rx="6" fill="rgba(56, 189, 248, 0.15)" stroke="#38bdf8" stroke-width="1.5"/>
+        <text x="890" y="138" fill="white" font-size="10" font-weight="600" text-anchor="middle">SGLang-Omni / vLLM-Omni</text>
+        <text x="890" y="155" fill="#94a3b8" font-size="8" text-anchor="middle">Python · Docker · CUDA · 24GB+ VRAM</text>
+
+        <!-- Model weight -->
+        <rect x="770" y="190" width="240" height="45" rx="6" fill="rgba(56, 189, 248, 0.15)" stroke="#38bdf8" stroke-width="1"/>
+        <text x="890" y="208" fill="white" font-size="9" font-weight="600" text-anchor="middle">higgs-audio-v3-tts-4b</text>
+        <text x="890" y="224" fill="#94a3b8" font-size="8" text-anchor="middle">~9.3 GB · Safetensors · higgs_multimodal_qwen3</text>
+
+        <!-- Higgs architecture details -->
+        <rect x="770" y="255" width="240" height="120" rx="6" fill="rgba(56, 189, 248, 0.08)" stroke="#38bdf8" stroke-width="0.5"/>
+        <text x="890" y="272" fill="white" font-size="8" font-weight="600" text-anchor="middle">Higgs Architecture</text>
+
+        <text x="780" y="290" fill="#94a3b8" font-size="7">Backbone: 36L, hidden=2560, GQA 32/8</text>
+        <text x="780" y="306" fill="#94a3b8" font-size="7">Audio: 8 codebooks × 1026 vocab</text>
+        <text x="780" y="322" fill="#94a3b8" font-size="7">Sample rate: 24 kHz · 25 fps</text>
+        <text x="780" y="338" fill="#94a3b8" font-size="7">Context: 8,192 tokens</text>
+        <text x="780" y="354" fill="#94a3b8" font-size="7">Vocoder: delay-pattern decoding</text>
+
+        <!-- Higgs API -->
+        <rect x="770" y="400" width="240" height="70" rx="6" fill="rgba(56, 189, 248, 0.15)" stroke="#38bdf8" stroke-width="1.5"/>
+        <text x="890" y="418" fill="white" font-size="9" font-weight="600" text-anchor="middle">OpenAI-compatible API</text>
+
+        <rect x="780" y="428" width="220" height="34" rx="4" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="0.5"/>
+        <text x="890" y="443" fill="#38bdf8" font-size="8" text-anchor="middle">POST /v1/audio/speech</text>
+        <text x="890" y="456" fill="#94a3b8" font-size="7" text-anchor="middle">JSON in → WAV bytes out (or SSE stream)</text>
+
+        <!-- Higgs controls -->
+        <rect x="770" y="490" width="240" height="100" rx="6" fill="rgba(56, 189, 248, 0.08)" stroke="#38bdf8" stroke-width="0.5"/>
+        <text x="890" y="508" fill="white" font-size="8" font-weight="600" text-anchor="middle">Inline Control Tags</text>
+
+        <text x="780" y="525" fill="#94a3b8" font-size="7">&lt;|emotion:elation|&gt; &lt;|emotion:anger|&gt; … (21 emotions)</text>
+        <text x="780" y="541" fill="#94a3b8" font-size="7">&lt;|style:whispering|&gt; &lt;|style:singing|&gt;</text>
+        <text x="780" y="557" fill="#94a3b8" font-size="7">&lt;|sfx:laughter|&gt; &lt;|sfx:cough|&gt; …</text>
+        <text x="780" y="573" fill="#94a3b8" font-size="7">&lt;|prosody:speed_fast|&gt; &lt;|prosody:pitch_low|&gt;</text>
+
+        <!-- Voice cloning -->
+        <rect x="770" y="610" width="240" height="50" rx="6" fill="rgba(56, 189, 248, 0.1)" stroke="#38bdf8" stroke-width="0.5" stroke-dasharray="4,2"/>
+        <text x="890" y="628" fill="#38bdf8" font-size="8" text-anchor="middle">Zero-shot voice cloning</text>
+        <text x="890" y="644" fill="#94a3b8" font-size="7" text-anchor="middle">Provide reference WAV + optional transcript</text>
+
+        <!-- ===================================================== -->
+        <!-- HTTP BRIDGE                                          -->
+        <!-- ===================================================== -->
+        <line x1="720" y1="597" x2="768" y2="597" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-sky)"/>
+        <text x="745" y="590" fill="#38bdf8" font-size="8" text-anchor="middle">localhost:8000</text>
+        <text x="745" y="608" fill="#94a3b8" font-size="7" text-anchor="middle">HTTP / SSE stream</text>
+
+        <!-- ===================================================== -->
+        <!-- EXTERNAL SERVICES                                     -->
+        <!-- ===================================================== -->
+        <rect x="770" y="690" width="240" height="65" rx="6" fill="rgba(30, 41, 59, 0.4)" stroke="#64748b" stroke-width="1" stroke-dasharray="6,3"/>
+        <text x="890" y="710" fill="white" font-size="9" font-weight="600" text-anchor="middle">External Fallback</text>
+        <text x="890" y="728" fill="#94a3b8" font-size="7" text-anchor="middle">Cloud LLM (if no local model)</text>
+        <text x="890" y="744" fill="#94a3b8" font-size="7" text-anchor="middle">Boson AI API (cloud Higgs TTS)</text>
+
+        <!-- ===================================================== -->
+        <!-- USER CONNECTIONS                                      -->
+        <!-- ===================================================== -->
+        <path d="M 120 370 L 155 370 L 155 245 L 173 245" fill="none" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="142" y="260" fill="#94a3b8" font-size="8" text-anchor="middle" transform="rotate(-90,142,260)">Keyboard · mouse</text>
+
+        <path d="M 175 680 L 120 680" fill="none" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="142" y="660" fill="#94a3b8" font-size="8" text-anchor="middle" transform="rotate(-90,142,660)">Sees · hears</text>
+
+        <!-- ===================================================== -->
+        <!-- WORKSPACE                                             -->
+        <!-- ===================================================== -->
+        <rect x="175" y="700" width="545" height="95" rx="8" fill="rgba(30, 41, 59, 0.4)" stroke="#475569" stroke-width="1"/>
+        <text x="188" y="720" fill="white" font-size="10" font-weight="600">Cargo Workspace</text>
+
+        <rect x="180" y="732" width="170" height="28" rx="4" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="265" y="749" fill="white" font-size="8" font-weight="600" text-anchor="middle">lexilens-gpui (binary)</text>
+
+        <rect x="360" y="732" width="170" height="28" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="445" y="749" fill="white" font-size="8" font-weight="600" text-anchor="middle">lexilens-server (lib)</text>
+
+        <rect x="540" y="732" width="170" height="28" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#64748b" stroke-width="1"/>
+        <text x="625" y="749" fill="white" font-size="8" font-weight="600" text-anchor="middle">lexilens-core (lib)</text>
+
+        <!-- Launch note -->
+        <rect x="180" y="766" width="530" height="22" rx="3" fill="rgba(30, 41, 59, 0.3)" stroke="#fbbf24" stroke-width="0.5"/>
+        <text x="445" y="781" fill="#fbbf24" font-size="7" text-anchor="middle">Startup: docker compose up (Higgs) + cargo run (LexiLens)</text>
+
+        <!-- Legend -->
+        <g transform="translate(800, 55)">
+          <text x="0" y="0" fill="white" font-size="9" font-weight="600">Legend</text>
+          <rect x="0" y="10" width="12" height="8" rx="2" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1"/>
+          <text x="18" y="18" fill="#94a3b8" font-size="7">Rust (gpui)</text>
+          <rect x="0" y="26" width="12" height="8" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+          <text x="18" y="34" fill="#94a3b8" font-size="7">Rust (actix/handler)</text>
+          <rect x="0" y="42" width="12" height="8" rx="2" fill="rgba(56, 189, 248, 0.15)" stroke="#38bdf8" stroke-width="1"/>
+          <text x="18" y="50" fill="#94a3b8" font-size="7">Python/Docker sidecar</text>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot sky"></div>
+          <h3>Higgs Audio v3 TTS — the real story</h3>
+        </div>
+        <ul>
+          <li>• <strong>Not</strong> a simple crate like <code>tts-rs</code> or <code>espeak-rs</code></li>
+          <li>• It's a <strong>4B-parameter multimodal LLM</strong> (higgs_multimodal_qwen3) — 36 layers, 2560 hidden dim, GQA 32/8</li>
+          <li>• Generates <strong>8 codebooks × 1026 vocab</strong> audio tokens at 25 fps via delay-pattern decoding</li>
+          <li>• Needs a <strong>dedicated inference server</strong>: SGLang-Omni or vLLM-Omni</li>
+          <li>• Exposes <strong>OpenAI-compatible</strong> <code>POST /v1/audio/speech</code> API</li>
+          <li>• Supports <strong>streaming SSE</strong> — sub-second time-to-first-audio</li>
+          <li>• <strong>9.3 GB</strong> disk, <strong>~24 GB VRAM</strong> GPU recommended</li>
+          <li>• 100+ languages, zero-shot voice cloning, emotion/style/prosody control tokens</li>
+          <li>• License: <strong>research and non-commercial only</strong></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>How Rust integrates with Higgs</h3>
+        </div>
+        <ul>
+          <li>• gpui calls <code>lexilens_server::handle_tts(text)</code> — <strong>direct fn call</strong></li>
+          <li>• Handler sends <code>reqwest::Client</code> POST to <code>http://127.0.0.1:8000/v1/audio/speech</code></li>
+          <li>• Higgs server returns <strong>WAV bytes</strong> (or SSE stream of base64 WAV chunks)</li>
+          <li>• Rust receives bytes → writes to <code>Vec&lt;u8&gt;</code> → stores in <code>ReadingModel</code></li>
+          <li>• gpui triggers <strong>rodio</strong> playback from the WAV buffer</li>
+          <li>• Streaming path: SSE → accumulate chunks → play as they arrive</li>
+        </ul>
+
+        <h4>Inline control example</h4>
+        <pre class="code-block">
+POST /v1/audio/speech
+{
+  "input": "&lt;|emotion:contentment|&gt;Here is your
+    reading: The sky was clear.
+    &lt;|sfx:sigh|&gt;Ah, what a peaceful day.",
+  "references": [{
+    "audio_path": "reader_voice.wav",
+    "text": "My name is [student_name]."
+  }]
+}
+        </pre>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Two-process architecture</h3>
+        </div>
+        <pre class="code-block terminal-block">
+# Terminal 1 — Higgs TTS Server
+docker run --gpus all --shm-size 32g \
+  -p 8000:8000 \
+  lmsysorg/sglang-omni:dev
+
+sgl-omni serve \
+  --model-path bosonai/higgs-audio-v3-tts-4b \
+  --port 8000
+
+# Terminal 2 — LexiLens
+cargo run --bin lexilens-gpui
+
+# gpui auto-connects to localhost:8000
+# Uses:
+#   POST /v1/audio/speech → TTS
+#   POST /v1/audio/speech?stream=true → SSE stream
+        </pre>
+        <ul style="margin-top:6px;">
+          <li>• Higgs runs <strong>once in the background</strong>, LexiLens starts independently</li>
+          <li>• On LexiLens startup, it pings Higgs — if unavailable, falls back to espeak-rs or shows a warning</li>
+          <li>• Higgs can also serve other apps (not tied to LexiLens)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>Rust TTS decision matrix</h3>
+        </div>
+        <div class="table-wrap">
+        <table class="matrix">
+          <tr>
+            <th>Option</th>
+            <th>Quality</th>
+            <th>Latency</th>
+            <th>GPU</th>
+            <th>Deps</th>
+          </tr>
+          <tr>
+            <td><strong style="color:#38bdf8;">Higgs v3</strong></td>
+            <td>High</td>
+            <td>~600ms</td>
+            <td>24GB+</td>
+            <td>Docker+Python</td>
+          </tr>
+          <tr>
+            <td>espeak-rs</td>
+            <td>Basic</td>
+            <td>~5ms</td>
+            <td>None</td>
+            <td>Pure Rust</td>
+          </tr>
+          <tr>
+            <td>Cloud API</td>
+            <td>Strong</td>
+            <td>~200ms</td>
+            <td>None</td>
+            <td>reqwest</td>
+          </tr>
+          <tr>
+            <td>candle/PyO3</td>
+            <td>Medium</td>
+            <td>~100ms</td>
+            <td>8GB+</td>
+            <td>Native Rust</td>
+          </tr>
+        </table>
+        </div>
+        <p class="note">
+          Design the TTS layer as a trait — swap implementations at runtime.
+          Start with espeak-rs for dev, add Higgs when the GPU is available.
+        </p>
+      </div>
+    </div>
+
+    <p class="footer">
+      LexiLens · gpui + actix-web + tokio + Higgs Audio v3 TTS &nbsp;|&nbsp; Rust desktop · GPU sidecar
+    </p>
+  </div>
+</body>
+</html>
