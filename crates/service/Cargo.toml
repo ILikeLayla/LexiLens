@@ -1,0 +1,16 @@
+[package]
+name = "service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+domain = { path = "../domain" }
+capture = { path = "../capture" }
+ocr = { path = "../ocr" }
+rewrite = { path = "../rewrite" }
+speech = { path = "../speech" }
+highlight = { path = "../highlight" }
+session = { path = "../session" }
+
+[lib]
+path = "src/lib.rs"

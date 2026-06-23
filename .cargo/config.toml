@@ -1,0 +1,2 @@
+[target.'cfg(windows)']
+rustflags = ["-A", "linker_messages"]
