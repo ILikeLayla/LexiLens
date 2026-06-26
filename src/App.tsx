@@ -5,6 +5,8 @@ import { GlobalWorkerOptions, Util, getDocument } from "pdfjs-dist";
 import type { TextContent } from "pdfjs-dist/types/src/display/api";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import "./App.css";
 import {
 	collectMissingConfigFields,
@@ -15,6 +17,16 @@ import {
 } from "./Settings";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+const CHAT_MIN_WIDTH = 260;
+const CHAT_MAX_WIDTH = 720;
+const CHAT_DEFAULT_WIDTH = 330;
+
+/** Render assistant markdown to sanitized HTML safe for dangerouslySetInnerHTML. */
+function renderMarkdown(text: string): string {
+	const html = marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
+	return DOMPurify.sanitize(html);
+}
 
 type SessionItem = {
 	id: string;
@@ -45,6 +57,9 @@ type PersistedAppState = {
 	activeFile: string;
 	sessions: SessionItem[];
 	filesBySession: Record<string, SessionFile[]>;
+	previewZoom: number;
+	chatWidth: number;
+	messages: ChatMessage[];
 };
 
 type ChatMessage = {
@@ -374,6 +389,7 @@ function App() {
 	const [chatPending, setChatPending] = useState(false);
 	const [chatInput, setChatInput] = useState("");
 	const [previewZoom, setPreviewZoom] = useState(100);
+	const [chatWidth, setChatWidth] = useState(CHAT_DEFAULT_WIDTH);
 	const [isDraggingPreview, setIsDraggingPreview] = useState(false);
 	const [previewPages, setPreviewPages] = useState<RenderedPage[]>([]);
 	const [renderedDocument, setRenderedDocument] = useState<RenderedDocument | null>(null);
@@ -392,6 +408,7 @@ function App() {
 		scrollTop: 0,
 		active: false,
 	});
+	const chatResizeRef = useRef({ pointerId: -1, startX: 0, startWidth: CHAT_DEFAULT_WIDTH, active: false });
 	const [appError, setAppError] = useState<string | null>(null);
 	const [previewError, setPreviewError] = useState("");
 	const [appConfig, setAppConfig] = useState<PersistedAppConfig>(DEFAULT_APP_CONFIG);
@@ -480,6 +497,42 @@ function App() {
 		setIsDraggingPreview(false);
 	};
 
+	const handleChatResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+		event.preventDefault();
+		chatResizeRef.current = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startWidth: chatWidth,
+			active: true,
+		};
+		try {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		} catch {
+			// Ignore: pointer capture is best-effort.
+		}
+	};
+
+	const handleChatResizeMove = (event: React.PointerEvent<HTMLDivElement>) => {
+		const drag = chatResizeRef.current;
+		if (!drag.active || drag.pointerId !== event.pointerId) {
+			return;
+		}
+		const delta = drag.startX - event.clientX;
+		const next = Math.min(CHAT_MAX_WIDTH, Math.max(CHAT_MIN_WIDTH, drag.startWidth + delta));
+		setChatWidth(next);
+	};
+
+	const endChatResize = (event?: React.PointerEvent<HTMLDivElement>) => {
+		const drag = chatResizeRef.current;
+		if (!drag.active) {
+			return;
+		}
+		if (event && drag.pointerId === event.pointerId && event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		chatResizeRef.current = { ...drag, active: false, pointerId: -1 };
+	};
+
 	useEffect(() => {
 		let cancelled = false;
 
@@ -522,13 +575,22 @@ function App() {
 					return;
 				}
 
-				setSessionCollapsed(persistedState.sessionCollapsed);
-				setFilesCollapsed(persistedState.filesCollapsed);
+				setSessionCollapsed(persistedState.sessionCollapsed ?? false);
+				setFilesCollapsed(persistedState.filesCollapsed ?? false);
 				setChatCollapsed(persistedState.chatCollapsed ?? false);
 				setActiveSession(persistedState.activeSession);
 				setActiveFile(persistedState.activeFile);
 				setSessions(persistedState.sessions);
 				setFilesBySession(persistedState.filesBySession);
+				if (persistedState.previewZoom) {
+					setPreviewZoom(persistedState.previewZoom);
+				}
+				if (persistedState.chatWidth) {
+					setChatWidth(Math.min(CHAT_MAX_WIDTH, Math.max(CHAT_MIN_WIDTH, persistedState.chatWidth)));
+				}
+				if (persistedState.messages?.length) {
+					setMessages(persistedState.messages);
+				}
 			} catch (error) {
 				if (!cancelled) {
 					setAppError(`Failed to restore app state: ${String(error)}`);
@@ -560,12 +622,15 @@ function App() {
 			activeFile,
 			sessions,
 			filesBySession,
+			previewZoom,
+			chatWidth,
+			messages,
 		};
 
 		void invoke("save_app_state", { state: persistedState }).catch((error) => {
 			setAppError((previous) => previous ?? `Failed to save app state: ${String(error)}`);
 		});
-	}, [activeFile, activeSession, appStateReady, chatCollapsed, filesBySession, filesCollapsed, sessionCollapsed, sessions]);
+	}, [activeFile, activeSession, appStateReady, chatCollapsed, chatWidth, filesBySession, filesCollapsed, messages, previewZoom, sessionCollapsed, sessions]);
 
 	useEffect(() => {
 		if (!currentFiles.length) {
@@ -1075,7 +1140,10 @@ function App() {
 			</section>
 
 			<section className="content-shell">
-				<div className={`content-grid ${chatCollapsed ? "content-grid-single" : ""}`}>
+				<div
+					className={`content-grid ${chatCollapsed ? "content-grid-single" : ""}`}
+					style={chatCollapsed ? undefined : { gridTemplateColumns: `minmax(0, 1fr) ${chatWidth}px` }}
+				>
 					<article className={`panel panel-preview ${chatCollapsed ? "is-expanded" : ""}`}>
 						<div className="panel-header">
 							<h2>Preview</h2>
@@ -1168,6 +1236,17 @@ function App() {
 
 					{!chatCollapsed ? (
 						<aside className="panel panel-chat">
+							<div
+								className="chat-resizer"
+								role="separator"
+								aria-orientation="vertical"
+								aria-label="Resize chat panel"
+								onPointerDown={handleChatResizeStart}
+								onPointerMove={handleChatResizeMove}
+								onPointerUp={endChatResize}
+								onPointerCancel={endChatResize}
+								onLostPointerCapture={() => endChatResize()}
+							/>
 							<div className="panel-header">
 								<h2>Chat</h2>
 								<div className="panel-header-actions">
@@ -1185,7 +1264,14 @@ function App() {
 							<div className="panel-body chat-thread">
 								{messages.map((message) => (
 									<div key={message.id} className={`chat-bubble ${message.role}`}>
-										{message.text}
+										{message.role === "assistant" ? (
+											<div
+												className="chat-markdown"
+												dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }}
+											/>
+										) : (
+											message.text
+										)}
 									</div>
 								))}
 								{chatPending ? <div className="chat-bubble assistant">Thinking...</div> : null}

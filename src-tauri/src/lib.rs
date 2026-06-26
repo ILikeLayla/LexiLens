@@ -215,26 +215,251 @@ async fn send_openai_compatible_messages(
         .ok_or_else(|| "Provider response did not contain readable text content".to_string())
 }
 
+/// Maximum number of characters returned when reading a file for the agent.
+const MAX_TOOL_FILE_CHARS: usize = 60_000;
+
+/// Maximum number of model round-trips allowed while resolving tool calls,
+/// bounding cost and preventing infinite tool loops.
+const MAX_TOOL_ITERATIONS: usize = 6;
+
+/// JSON specification of the file-access tools exposed to the agent, in the
+/// OpenAI-compatible function-calling format.
+fn file_tool_specs() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "type": "function",
+            "function": {
+                "name": "list_session_files",
+                "description": "List the files available in the current reading session folder. Returns each file's name and processing status. Call this first when you are unsure of the exact file name to read.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "Read the text contents of a file in the current session folder so you can summarize or analyze it. Works for text-based files (for example .md, .txt, .json, .csv, and source code), PDF documents, and Office documents (DOCX/PPTX, which require LibreOffice). Scanned or image-only PDFs may yield no text. Very large files are truncated.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_name": {
+                            "type": "string",
+                            "description": "The file name inside the session folder, exactly as listed by list_session_files."
+                        }
+                    },
+                    "required": ["file_name"],
+                    "additionalProperties": false
+                }
+            }
+        }
+    ])
+}
+
+/// List the files of a session folder as a human/agent-readable summary.
+fn tool_list_session_files(session_path: &str) -> Result<String, String> {
+    let session = session::read_folder_session(session_path)?;
+    if session.files.is_empty() {
+        return Ok("The session folder contains no files.".to_string());
+    }
+
+    let mut listing = format!("Files in session '{}':\n", session.title);
+    for file in &session.files {
+        listing.push_str(&format!("- {} (status: {})\n", file.name, file.status));
+    }
+    Ok(listing)
+}
+
+/// Read a session file as text, extracting from PDF/Office documents when
+/// possible, and truncating very large content.
+fn tool_read_file(session_path: &str, file_name: &str) -> Result<String, String> {
+    let file_path = resolve_active_file_path(session_path, file_name)?;
+
+    let content = match render::extract_document_text(&file_path) {
+        Ok(text) => text,
+        Err(error) => {
+            return Ok(format!(
+                "Could not read '{file_name}' as text: {error}"
+            ));
+        }
+    };
+
+    if content.trim().is_empty() {
+        return Ok(format!(
+            "The file '{file_name}' produced no extractable text (it may be empty, scanned, or image-only)."
+        ));
+    }
+
+    if content.chars().count() > MAX_TOOL_FILE_CHARS {
+        let truncated: String = content.chars().take(MAX_TOOL_FILE_CHARS).collect();
+        Ok(format!(
+            "{truncated}\n\n[Content truncated to the first {MAX_TOOL_FILE_CHARS} characters.]"
+        ))
+    } else {
+        Ok(content)
+    }
+}
+
+/// Dispatch a tool call requested by the model to its implementation.
+fn execute_file_tool(
+    session_path: Option<&str>,
+    name: &str,
+    arguments: &serde_json::Value,
+) -> Result<String, String> {
+    let session_path = session_path
+        .ok_or_else(|| "No active session folder is available for file tools.".to_string())?;
+
+    match name {
+        "list_session_files" => tool_list_session_files(session_path),
+        "read_file" => {
+            let file_name = arguments
+                .get("file_name")
+                .and_then(|value| value.as_str())
+                .ok_or_else(|| "Missing required argument 'file_name'.".to_string())?;
+            tool_read_file(session_path, file_name)
+        }
+        other => Err(format!("Unknown tool '{other}'.")),
+    }
+}
+
+/// Run an OpenAI-compatible chat completion with the file-access tool loop.
+///
+/// When `session_path` is provided, the file tools are exposed to the model and
+/// any requested tool calls are executed locally and fed back until the model
+/// produces a final textual answer (bounded by `MAX_TOOL_ITERATIONS`).
+async fn run_agentic_chat(
+    config: &PersistedAppConfig,
+    session_path: Option<&str>,
+    mut messages: Vec<serde_json::Value>,
+    temperature: f32,
+) -> Result<String, String> {
+    let mut base_url = config.base_url.trim().trim_end_matches('/').to_string();
+    if base_url.is_empty() {
+        return Err("Missing baseUrl for openai-compatible provider".to_string());
+    }
+    if !base_url.ends_with("/chat/completions") {
+        base_url.push_str("/chat/completions");
+    }
+
+    let tools = session_path.map(|_| file_tool_specs());
+    let client = reqwest::Client::new();
+
+    for _ in 0..MAX_TOOL_ITERATIONS {
+        let mut body = serde_json::json!({
+            "model": config.model,
+            "messages": messages,
+            "temperature": temperature,
+        });
+        if let Some(tools) = &tools {
+            body["tools"] = tools.clone();
+        }
+
+        let response = client
+            .post(&base_url)
+            .header(CONTENT_TYPE, "application/json")
+            .header(AUTHORIZATION, format!("Bearer {}", config.api_key.trim()))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to call provider API: {error}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "<unreadable error body>".to_string());
+            return Err(format!("Provider API returned {status}: {body}"));
+        }
+
+        let parsed: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|error| format!("Failed to parse provider response: {error}"))?;
+
+        let message = parsed
+            .get("choices")
+            .and_then(|choices| choices.get(0))
+            .and_then(|choice| choice.get("message"))
+            .cloned()
+            .ok_or_else(|| "Provider response did not contain choices".to_string())?;
+
+        let tool_calls = message
+            .get("tool_calls")
+            .and_then(|value| value.as_array())
+            .filter(|calls| !calls.is_empty())
+            .cloned();
+
+        let Some(calls) = tool_calls else {
+            let content = message
+                .get("content")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            return extract_response_text(content)
+                .ok_or_else(|| "Provider response did not contain readable text content".to_string());
+        };
+
+        // Echo the assistant message (with its tool_calls) back verbatim so the
+        // follow-up tool results line up with the requested call ids.
+        messages.push(message);
+
+        for call in calls {
+            let call_id = call
+                .get("id")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let function = call.get("function");
+            let name = function
+                .and_then(|function| function.get("name"))
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            let raw_arguments = function
+                .and_then(|function| function.get("arguments"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("{}");
+            let arguments: serde_json::Value =
+                serde_json::from_str(raw_arguments).unwrap_or_else(|_| serde_json::json!({}));
+
+            let result_text = match execute_file_tool(session_path, name, &arguments) {
+                Ok(text) => text,
+                Err(error) => format!("Tool error: {error}"),
+            };
+
+            messages.push(serde_json::json!({
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": result_text,
+            }));
+        }
+    }
+
+    Err("The assistant kept requesting tools without producing a final answer. Please try again.".to_string())
+}
+
 async fn call_openai_compatible_chat(config: &PersistedAppConfig, request: &ChatRequest) -> Result<String, String> {
     let session_title = request.session_title.as_deref().unwrap_or("(none)");
     let session_path = request.session_path.as_deref().unwrap_or("(none)");
     let file_name = request.active_file_name.as_deref().unwrap_or("(none)");
     let file_status = request.active_file_status.as_deref().unwrap_or("(none)");
 
-    let mut messages = vec![OpenAiCompatibleMessage {
-        role: "system".to_string(),
-        content: "You are LexiLens, a reading and rewriting assistant. Use provided session/file context to answer precisely and keep responses concise and helpful.".to_string(),
-    }];
+    let mut messages = vec![serde_json::json!({
+        "role": "system",
+        "content": "You are LexiLens, a reading and rewriting assistant. Use the provided session/file context to answer precisely and keep responses concise and helpful. When the user asks you to summarize or analyze a file, call the read_file tool to read its contents first (use list_session_files if you are unsure of the exact file name), and ground your answer only in the contents you have actually read."
+    })];
 
     for message in request.recent_messages.iter().rev().take(8).rev() {
         let normalized_role = match message.role.as_str() {
-            "assistant" | "user" | "system" => message.role.clone(),
-            _ => "user".to_string(),
+            "assistant" | "user" | "system" => message.role.as_str(),
+            _ => "user",
         };
-        messages.push(OpenAiCompatibleMessage {
-            role: normalized_role,
-            content: message.text.clone(),
-        });
+        messages.push(serde_json::json!({
+            "role": normalized_role,
+            "content": message.text,
+        }));
     }
 
     let contextual_user_prompt = format!(
@@ -242,12 +467,18 @@ async fn call_openai_compatible_chat(config: &PersistedAppConfig, request: &Chat
         request.user_message
     );
 
-    messages.push(OpenAiCompatibleMessage {
-        role: "user".to_string(),
-        content: contextual_user_prompt,
-    });
+    messages.push(serde_json::json!({
+        "role": "user",
+        "content": contextual_user_prompt,
+    }));
 
-    send_openai_compatible_messages(config, messages, 0.3).await
+    let session_path_for_tools = request
+        .session_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty());
+
+    run_agentic_chat(config, session_path_for_tools, messages, 0.3).await
 }
 
 async fn refine_text_for_speech(config: &PersistedAppConfig, text: &str) -> Result<String, String> {

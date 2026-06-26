@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
+pdf-extract = "0.7"
 
 [lib]
 path = "src/lib.rs"

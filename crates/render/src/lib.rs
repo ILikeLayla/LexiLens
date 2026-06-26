@@ -96,6 +96,68 @@ pub fn render_document(path: &Path) -> Result<RenderedDocument, String> {
   })
 }
 
+/// Extract the plain-text contents of a document for analysis or summarization.
+///
+/// Supports text-based files directly, PDFs via `pdf-extract`, and Office
+/// documents (DOCX/PPTX and similar) via a LibreOffice text conversion.
+pub fn extract_document_text(path: &Path) -> Result<String, String> {
+  if !path.exists() {
+    return Err(format!("File does not exist: {}", path.display()));
+  }
+
+  let extension = path
+    .extension()
+    .and_then(|value| value.to_str())
+    .map(|value| value.to_ascii_lowercase())
+    .unwrap_or_default();
+
+  match extension.as_str() {
+    "pdf" => extract_pdf_text(path),
+    "docx" | "doc" | "pptx" | "ppt" | "odt" | "odp" | "rtf" => extract_office_text(path, &extension),
+    _ => fs::read_to_string(path).map_err(|_| {
+      format!(
+        "The file is not UTF-8 text and has no supported text extractor (extension '{}').",
+        if extension.is_empty() { "none" } else { &extension }
+      )
+    }),
+  }
+}
+
+fn extract_pdf_text(path: &Path) -> Result<String, String> {
+  pdf_extract::extract_text(path).map_err(|error| format!("Failed to extract PDF text: {error}"))
+}
+
+fn extract_office_text(path: &Path, extension: &str) -> Result<String, String> {
+  let soffice_path = detect_soffice_path().ok_or_else(|| {
+    format!("Reading '{extension}' files as text requires LibreOffice (soffice) to be installed.")
+  })?;
+
+  let output_dir = unique_temp_preview_dir("soffice-txt")?;
+  let output = Command::new(&soffice_path)
+    .arg("--headless")
+    .arg("--convert-to")
+    .arg("txt:Text")
+    .arg("--outdir")
+    .arg(&output_dir)
+    .arg(path)
+    .output()
+    .map_err(|error| format!("Failed to start LibreOffice text conversion: {error}"))?;
+
+  if !output.status.success() {
+    let _ = fs::remove_dir_all(&output_dir);
+    return Err(format!(
+      "LibreOffice text conversion failed: {}",
+      String::from_utf8_lossy(&output.stderr)
+    ));
+  }
+
+  let txt_path = output_dir.join(format!("{}.txt", file_stem(path)));
+  let text = fs::read_to_string(&txt_path)
+    .map_err(|error| format!("Failed to read converted text: {error}"));
+  let _ = fs::remove_dir_all(&output_dir);
+  text
+}
+
 fn render_markdown(path: &Path) -> Result<Vec<PageDraft>, String> {
   let content = fs::read_to_string(path).map_err(|error| format!("Failed to read markdown file: {error}"))?;
   let fallback_title = file_stem(path);

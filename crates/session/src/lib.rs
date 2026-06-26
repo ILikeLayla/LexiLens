@@ -40,15 +40,41 @@ pub struct FolderSession {
   pub files: Vec<SessionFile>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedChatMessage {
+  pub id: String,
+  pub role: String,
+  pub text: String,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistedAppState {
+  #[serde(default)]
   pub session_collapsed: bool,
+  #[serde(default)]
   pub files_collapsed: bool,
+  #[serde(default)]
+  pub chat_collapsed: bool,
   pub active_session: String,
   pub active_file: String,
   pub sessions: Vec<PersistedSessionItem>,
   pub files_by_session: HashMap<String, Vec<SessionFile>>,
+  #[serde(default = "default_preview_zoom")]
+  pub preview_zoom: u32,
+  #[serde(default = "default_chat_width")]
+  pub chat_width: u32,
+  #[serde(default)]
+  pub messages: Vec<PersistedChatMessage>,
+}
+
+fn default_preview_zoom() -> u32 {
+  100
+}
+
+fn default_chat_width() -> u32 {
+  330
 }
 
 #[derive(Serialize, Deserialize, Clone)]
