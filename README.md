@@ -3,7 +3,7 @@
 LexiLens is scaffolded as a multi-crate Rust workspace that keeps the architecture abstract:
 
 - `domain` defines the page-level domain types and traits.
-- `capture`, `ocr`, `rewrite`, `speech`, `highlight`, and `session` provide the split components.
+- `capture`, `ocr`, `llm`, `rewrite`, `speech`, `highlight`, and `session` provide the split components.
 - `service` wires the pipeline together with placeholder adapters.
 
 The project intentionally avoids concrete model names and external APIs at this stage.

@@ -5,10 +5,10 @@ members = [
   "crates/domain",
   "crates/capture",
   "crates/ocr",
+  "crates/llm",
   "crates/rewrite",
   "crates/speech",
   "crates/highlight",
   "crates/session",
   "crates/service",
 ]
-
