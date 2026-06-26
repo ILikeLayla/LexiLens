@@ -51,6 +51,26 @@ pub struct PersistedAppState {
   pub files_by_session: HashMap<String, Vec<SessionFile>>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedAppConfig {
+  pub provider: String,
+  pub api_key: String,
+  pub base_url: String,
+  pub model: String,
+}
+
+impl Default for PersistedAppConfig {
+  fn default() -> Self {
+    Self {
+      provider: "openai-compatible".to_string(),
+      api_key: String::new(),
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+      model: "gemini-2.5-flash".to_string(),
+    }
+  }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistedSessionItem {
@@ -65,6 +85,13 @@ pub fn app_state_file_path(app_data_dir: &Path) -> Result<PathBuf, String> {
   fs::create_dir_all(&state_dir).map_err(|error| format!("Failed to create state directory: {error}"))?;
 
   Ok(state_dir.join("app-state.json"))
+}
+
+pub fn app_config_file_path(app_data_dir: &Path) -> Result<PathBuf, String> {
+  let config_dir = app_data_dir.join("LexiLens");
+  fs::create_dir_all(&config_dir).map_err(|error| format!("Failed to create config directory: {error}"))?;
+
+  Ok(config_dir.join("config.json"))
 }
 
 pub fn read_folder_session(path: &str) -> Result<FolderSession, String> {
@@ -138,6 +165,32 @@ pub fn save_app_state(state_file_path: &Path, state: &PersistedAppState) -> Resu
   let contents = serde_json::to_string_pretty(state).map_err(|error| format!("Failed to serialize app state: {error}"))?;
 
   fs::write(state_file_path, contents).map_err(|error| format!("Failed to write app state file: {error}"))
+}
+
+pub fn ensure_app_config(config_file_path: &Path) -> Result<(), String> {
+  if config_file_path.exists() {
+    return Ok(());
+  }
+
+  save_app_config(config_file_path, &PersistedAppConfig::default())
+}
+
+pub fn load_app_config(config_file_path: &Path) -> Result<PersistedAppConfig, String> {
+  if !config_file_path.exists() {
+    let default_config = PersistedAppConfig::default();
+    save_app_config(config_file_path, &default_config)?;
+    return Ok(default_config);
+  }
+
+  let contents = fs::read_to_string(config_file_path).map_err(|error| format!("Failed to read app config: {error}"))?;
+
+  serde_json::from_str(&contents).map_err(|error| format!("Failed to parse app config: {error}"))
+}
+
+pub fn save_app_config(config_file_path: &Path, config: &PersistedAppConfig) -> Result<(), String> {
+  let contents = serde_json::to_string_pretty(config).map_err(|error| format!("Failed to serialize app config: {error}"))?;
+
+  fs::write(config_file_path, contents).map_err(|error| format!("Failed to write app config file: {error}"))
 }
 
 fn sanitize_id(path: &str) -> String {
