@@ -1,16 +1,16 @@
 # LexiLens
 
-LexiLens is scaffolded as a multi-crate Rust workspace that keeps the architecture abstract:
+LexiLens is a Tauri desktop app with a Rust backend and a React + TypeScript frontend.
 
-- `domain` defines the page-level domain types and traits.
-- `capture`, `ocr`, `llm`, `rewrite`, `speech`, `highlight`, and `session` provide the split components.
-- `service` wires the pipeline together with placeholder adapters.
+- `src-tauri` hosts the Tauri commands and provider integrations.
+- `crates/render` renders supported files into previewable output and extracts text for chat tools.
+- `crates/session` stores local app state, settings, and folder session metadata.
 
-The project intentionally avoids concrete model names and external APIs at this stage.
+The repository no longer includes the earlier placeholder pipeline crates that were not part of the running app.
 
 ## Desktop App
 
-The repository root now also hosts a Tauri v2 desktop app with a Bun + React + TypeScript frontend.
+The repository root hosts the Bun + React + TypeScript frontend used by the desktop app.
 
 - Install frontend dependencies with `bun install`.
 - Start the desktop app in development with `bun run tauri dev`.

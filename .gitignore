@@ -5,3 +5,4 @@
 /node_modules/
 /dist
 .tauri-scaffold-temp/
+./.vscode/settings.json
