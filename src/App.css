@@ -524,10 +524,10 @@ body {
 }
 
 .preview-zoom-value {
-  min-width: 3.6rem;
+  min-width: 3rem;
   font-size: 0.78rem;
   letter-spacing: 0.08em;
-  text-align: right;
+  text-align: center;
   color: var(--text-dim);
 }
 
