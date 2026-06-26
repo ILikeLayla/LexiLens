@@ -9,6 +9,7 @@ members = [
   "crates/rewrite",
   "crates/speech",
   "crates/highlight",
+  "crates/render",
   "crates/session",
   "crates/service",
 ]

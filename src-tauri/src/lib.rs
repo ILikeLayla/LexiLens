@@ -1,5 +1,6 @@
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
+use std::path::{Component, Path};
 use tauri::{AppHandle, Manager};
 use session::{FolderSession, PersistedAppConfig, PersistedAppState};
 
@@ -74,6 +75,29 @@ fn app_config_file_path(app_handle: &AppHandle) -> Result<std::path::PathBuf, St
     session::app_config_file_path(&app_data_dir)
 }
 
+fn resolve_active_file_path(session_path: &str, file_name: &str) -> Result<std::path::PathBuf, String> {
+    let trimmed_name = file_name.trim();
+    if trimmed_name.is_empty() {
+        return Err("Active file name cannot be empty".to_string());
+    }
+
+    let relative_path = Path::new(trimmed_name);
+    if relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
+    {
+        return Err("Active file name must be a relative file inside the selected session".to_string());
+    }
+
+    let file_path = Path::new(session_path).join(relative_path);
+    if !file_path.exists() {
+        return Err(format!("Active file does not exist: {}", file_path.display()));
+    }
+
+    Ok(file_path)
+}
+
 #[tauri::command]
 fn read_folder_session(path: String) -> Result<FolderSession, String> {
     session::read_folder_session(&path)
@@ -101,6 +125,15 @@ fn load_app_config(app_handle: AppHandle) -> Result<PersistedAppConfig, String> 
 fn save_app_config(app_handle: AppHandle, config: PersistedAppConfig) -> Result<(), String> {
     let config_file_path = app_config_file_path(&app_handle)?;
     session::save_app_config(&config_file_path, &config)
+}
+
+#[tauri::command]
+async fn render_active_file(session_path: String, file_name: String) -> Result<render::RenderedDocument, String> {
+    let file_path = resolve_active_file_path(&session_path, &file_name)?;
+
+    tauri::async_runtime::spawn_blocking(move || render::render_document(&file_path))
+        .await
+        .map_err(|error| format!("Failed to join render task: {error}"))?
 }
 
 fn provider_requires_api_key(provider: &str) -> bool {
@@ -257,6 +290,7 @@ pub fn run() {
             save_app_state,
             load_app_config,
             save_app_config,
+            render_active_file,
             chat_with_context
         ])
         .run(tauri::generate_context!())

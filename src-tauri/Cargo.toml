@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+render = { path = "../crates/render" }
 session = { path = "../crates/session" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

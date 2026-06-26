@@ -126,7 +126,7 @@ pub fn read_folder_session(path: &str) -> Result<FolderSession, String> {
 
     let status = match entry_path.extension().and_then(|ext| ext.to_str()) {
       Some("md") | Some("txt") | Some("json") => "processed",
-      Some("pdf") | Some("docx") | Some("png") | Some("jpg") | Some("jpeg") => "raw",
+      Some("pdf") | Some("docx") | Some("pptx") | Some("png") | Some("jpg") | Some("jpeg") => "raw",
       _ => "draft",
     }
     .to_string();
