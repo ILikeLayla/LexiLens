@@ -361,6 +361,7 @@ async function renderPdfToPages(previewDocument: RenderedDocument): Promise<Rend
 function App() {
 	const [sessionCollapsed, setSessionCollapsed] = useState(false);
 	const [filesCollapsed, setFilesCollapsed] = useState(false);
+	const [showSessionMenu, setShowSessionMenu] = useState(false);
 	const [activeSession, setActiveSession] = useState("");
 	const [activeFile, setActiveFile] = useState("");
 	const [sessions, setSessions] = useState<SessionItem[]>([]);
@@ -383,18 +384,28 @@ function App() {
 	const [appConfig, setAppConfig] = useState<PersistedAppConfig>(DEFAULT_APP_CONFIG);
 	const [showSettings, setShowSettings] = useState(false);
 	const [settingsError, setSettingsError] = useState<string | null>(null);
-	const [messages, setMessages] = useState<ChatMessage[]>([
-		{
-			id: "m-1",
-			role: "assistant",
-			text: "I can now call your configured LLM. Ask with the current session and file context.",
-		},
-	]);
+	const [messages, setMessages] = useState<ChatMessage[]>([]);
 
 	const activeSessionDetails = sessions.find((session) => session.id === activeSession) ?? null;
 	const currentFiles = filesBySession[activeSession] ?? [];
 	const activeFileDetails = currentFiles.find((file) => file.id === activeFile) ?? currentFiles[0] ?? null;
 	const renderableFiles = currentFiles.filter((file) => isRenderableFile(file.name));
+
+	const handleSessionSelect = (sessionId: string) => {
+		setActiveSession(sessionId);
+		setActiveFile((filesBySession[sessionId] ?? [])[0]?.id ?? "");
+		setShowSessionMenu(false);
+	};
+
+	const toggleSessionMenu = () => {
+		if (filesCollapsed) {
+			setFilesCollapsed(false);
+			setShowSessionMenu(true);
+			return;
+		}
+
+		setShowSessionMenu((previous) => !previous);
+	};
 
 	useEffect(() => {
 		let cancelled = false;
@@ -875,71 +886,6 @@ function App() {
 
 	return (
 		<main className="workspace">
-			<section className={`panel panel-session ${sessionCollapsed ? "is-collapsed" : ""}`}>
-				<div className="panel-header">
-					{!sessionCollapsed && <h2>Sessions</h2>}
-					<div className="panel-header-actions">
-						{!sessionCollapsed && (
-							<button
-								className="icon-btn"
-								type="button"
-								onClick={() => {
-									setSettingsError(null);
-									setShowSettings(true);
-								}}
-								aria-label="Open settings"
-								title="Settings"
-							>
-								⚙
-							</button>
-						)}
-						<button
-							className="icon-btn"
-							type="button"
-							onClick={() => setSessionCollapsed((previous) => !previous)}
-							aria-label={sessionCollapsed ? "Expand sessions" : "Collapse sessions"}
-							title={sessionCollapsed ? "Expand sessions" : "Collapse sessions"}
-						>
-							{sessionCollapsed ? "»" : "«"}
-						</button>
-					</div>
-				</div>
-
-				<div className="panel-body scroll-y">
-					{!sessionCollapsed && (
-						<button className="action-btn" type="button" onClick={openFolderAsSession} disabled={loadingFolder}>
-							{loadingFolder ? "Opening..." : "Open Folder"}
-						</button>
-					)}
-
-					{appError && !sessionCollapsed ? <p className="error-note">{appError}</p> : null}
-
-					{sessions.map((session) => (
-						<button
-							key={session.id}
-							type="button"
-							className={`list-item ${activeSession === session.id ? "active" : ""}`}
-							onClick={() => {
-								setActiveSession(session.id);
-								setActiveFile((filesBySession[session.id] ?? [])[0]?.id ?? "");
-							}}
-						>
-							{sessionCollapsed ? (
-								<span className="mono-index">{session.title.slice(0, 1)}</span>
-							) : (
-								<>
-									<span className="item-title">{session.title}</span>
-									<span className="item-meta">{session.updatedAt}</span>
-									<span className="item-meta path">{session.path}</span>
-								</>
-							)}
-						</button>
-					))}
-
-					{!sessions.length && !sessionCollapsed ? <p className="empty-note">No sessions yet. Open a folder to begin.</p> : null}
-				</div>
-			</section>
-
 			<section className={`panel panel-files ${filesCollapsed ? "is-collapsed" : ""}`}>
 				<div className="panel-header">
 					{!filesCollapsed && <h2>Files</h2>}
@@ -954,67 +900,107 @@ function App() {
 					</button>
 				</div>
 
-				<div className="panel-body scroll-y">
-					{currentFiles.map((file) => {
-						const renderable = isRenderableFile(file.name);
-						return (
-							<button
-								key={file.id}
-								type="button"
-								className={`list-item ${activeFileDetails?.id === file.id ? "active" : ""}`}
-								onClick={() => setActiveFile(file.id)}
-							>
-								{filesCollapsed ? (
-									<span className="mono-index">{file.name.slice(0, 1).toUpperCase()}</span>
-								) : (
-									<>
+				<div className="panel-body files-panel-body">
+					<div className="scroll-y files-list">
+						{currentFiles.map((file) => {
+							return (
+								<button
+									key={file.id}
+									type="button"
+									className={`list-item ${activeFileDetails?.id === file.id ? "active" : ""}`}
+									onClick={() => setActiveFile(file.id)}
+								>
+									{filesCollapsed ? (
+										<span className="mono-index">{file.name.slice(0, 1).toUpperCase()}</span>
+									) : (
 										<span className="item-title">{file.name}</span>
-										<span className={`status status-${file.status}`}>{file.status}</span>
-										<span className="item-meta">{renderable ? "Preview ready" : "Unsupported for preview"}</span>
-									</>
-								)}
-							</button>
-						);
-					})}
-					{!currentFiles.length && !filesCollapsed ? <p className="empty-note">No files in this session.</p> : null}
+									)}
+								</button>
+							);
+						})}
+						{!currentFiles.length && !filesCollapsed ? <p className="empty-note">No files in this session.</p> : null}
+					</div>
+
+					<div className={`session-switcher ${showSessionMenu ? "is-open" : ""}`}>
+						<div className="session-switcher-bar">
+							{activeSessionDetails ? (
+								<button
+									type="button"
+									className={`list-item session-current-btn ${showSessionMenu ? "active" : ""}`}
+									onClick={toggleSessionMenu}
+									aria-expanded={showSessionMenu}
+									aria-label={showSessionMenu ? "Hide other sessions" : "Show other sessions"}
+								>
+									{filesCollapsed ? (
+										<span className="mono-index">{activeSessionDetails.title.slice(0, 1).toUpperCase()}</span>
+									) : (
+										<span className="item-title">{activeSessionDetails.title}</span>
+									)}
+								</button>
+							) : (
+								<button className="action-btn session-open-btn" type="button" onClick={openFolderAsSession} disabled={loadingFolder}>
+									{loadingFolder ? "Opening..." : "Open Folder"}
+								</button>
+							)}
+
+							{!filesCollapsed ? (
+								<button
+									className="icon-btn session-settings-btn"
+									type="button"
+									onClick={() => {
+										setSettingsError(null);
+										setShowSettings(true);
+									}}
+									aria-label="Open settings"
+									title="Settings"
+								>
+									⚙
+								</button>
+							) : null}
+						</div>
+
+						{showSessionMenu && !filesCollapsed ? (
+							<div className="session-menu">
+								<div className="session-menu-section">
+									<div className="session-menu-heading-row">
+										<span className="session-menu-heading">Recent Locations</span>
+									</div>
+									{sessions.map((session) => (
+										<button
+											key={session.id}
+											type="button"
+											className={`list-item session-menu-item ${activeSession === session.id ? "active" : ""}`}
+											onClick={() => handleSessionSelect(session.id)}
+										>
+											<span className="item-title">{session.title}</span>
+										</button>
+									))}
+									{!sessions.length ? <p className="empty-note">No sessions yet.</p> : null}
+								</div>
+
+								<div className="session-menu-section">
+									<span className="session-menu-heading">Location</span>
+									<button
+										className="session-menu-link"
+										type="button"
+										onClick={() => {
+											setShowSessionMenu(false);
+											void openFolderAsSession();
+										}}
+										disabled={loadingFolder}
+									>
+										{loadingFolder ? "Opening..." : "Open Folder..."}
+									</button>
+								</div>
+								{appError ? <p className="error-note">{appError}</p> : null}
+							</div>
+						) : null}
+					</div>
 				</div>
 			</section>
 
 			<section className="content-shell">
 				<div className="content-grid">
-					<aside className="panel panel-chat">
-						<div className="panel-header">
-							<h2>Chat</h2>
-						</div>
-						<div className="panel-body chat-thread">
-							{messages.map((message) => (
-								<div key={message.id} className={`chat-bubble ${message.role}`}>
-									{message.text}
-								</div>
-							))}
-							{chatPending ? <div className="chat-bubble assistant">Thinking...</div> : null}
-						</div>
-						<div className="chat-input-wrap">
-							<input
-								type="text"
-								placeholder="Ask to rewrite, summarize, or explain with context..."
-								aria-label="Chat input"
-								value={chatInput}
-								disabled={chatPending}
-								onChange={(event) => setChatInput(event.target.value)}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") {
-										event.preventDefault();
-										void sendChatMessage();
-									}
-								}}
-							/>
-							<button type="button" onClick={() => void sendChatMessage()} disabled={chatPending || !chatInput.trim()}>
-								{chatPending ? "Sending..." : "Send"}
-							</button>
-						</div>
-					</aside>
-
 					<article className="panel panel-preview">
 						<div className="panel-header">
 							<h2>Preview</h2>
@@ -1072,6 +1058,39 @@ function App() {
 							) : null}
 						</div>
 					</article>
+
+					<aside className="panel panel-chat">
+						<div className="panel-header">
+							<h2>Chat</h2>
+						</div>
+						<div className="panel-body chat-thread">
+							{messages.map((message) => (
+								<div key={message.id} className={`chat-bubble ${message.role}`}>
+									{message.text}
+								</div>
+							))}
+							{chatPending ? <div className="chat-bubble assistant">Thinking...</div> : null}
+						</div>
+						<div className="chat-input-wrap">
+							<input
+								type="text"
+								placeholder="Ask to rewrite, summarize, or explain with context..."
+								aria-label="Chat input"
+								value={chatInput}
+								disabled={chatPending}
+								onChange={(event) => setChatInput(event.target.value)}
+								onKeyDown={(event) => {
+									if (event.key === "Enter") {
+										event.preventDefault();
+										void sendChatMessage();
+									}
+								}}
+							/>
+							<button type="button" onClick={() => void sendChatMessage()} disabled={chatPending || !chatInput.trim()}>
+								{chatPending ? "Sending..." : "Send"}
+							</button>
+						</div>
+					</aside>
 				</div>
 			</section>
 
