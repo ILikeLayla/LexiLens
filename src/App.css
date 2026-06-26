@@ -80,6 +80,40 @@ body,
   font-weight: 600;
 }
 
+.preview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.play-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.play-btn:hover {
+  border-color: var(--accent);
+  background: rgba(123, 216, 189, 0.26);
+}
+
+.play-btn.is-playing {
+  color: #ffb4a8;
+  border-color: rgba(255, 120, 100, 0.5);
+  background: rgba(255, 120, 100, 0.16);
+}
+
 .panel-body {
   padding: 0.6rem;
 }

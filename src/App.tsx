@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { GlobalWorkerOptions, Util, getDocument } from "pdfjs-dist";
 import type { TextContent } from "pdfjs-dist/types/src/display/api";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
@@ -78,6 +78,16 @@ type PreviewSentence = {
 	id: string;
 	text: string;
 	rects: SentenceRect[];
+};
+
+type SynthesizedSpeech = {
+	mimeType: string;
+	audioBase64: string;
+};
+
+type PreparedSpeech = {
+	text: string;
+	audio: SynthesizedSpeech | null;
 };
 
 type RenderedPage = {
@@ -426,6 +436,11 @@ function App() {
 	const [previewPages, setPreviewPages] = useState<RenderedPage[]>([]);
 	const [renderedDocument, setRenderedDocument] = useState<RenderedDocument | null>(null);
 	const [activeSentenceKey, setActiveSentenceKey] = useState("");
+	const [isReadingAll, setIsReadingAll] = useState(false);
+	const speechTokenRef = useRef(0);
+	const audioRef = useRef<HTMLAudioElement | null>(null);
+	const playbackResolveRef = useRef<(() => void) | null>(null);
+	const speechCacheRef = useRef<Map<string, Promise<PreparedSpeech>>>(new Map());
 	const [appError, setAppError] = useState<string | null>(null);
 	const [previewError, setPreviewError] = useState("");
 	const [messages, setMessages] = useState<ChatMessage[]>([
@@ -575,9 +590,21 @@ function App() {
 
 		return () => {
 			cancelled = true;
+			speechTokenRef.current += 1;
 			if (typeof window !== "undefined" && window.speechSynthesis) {
 				window.speechSynthesis.cancel();
 			}
+			if (audioRef.current) {
+				audioRef.current.pause();
+				audioRef.current = null;
+			}
+			if (playbackResolveRef.current) {
+				const resolve = playbackResolveRef.current;
+				playbackResolveRef.current = null;
+				resolve();
+			}
+			speechCacheRef.current.clear();
+			setIsReadingAll(false);
 			setActiveSentenceKey("");
 		};
 	}, [activeFileDetails, activeSessionDetails]);
@@ -621,32 +648,226 @@ function App() {
 		}
 	};
 
+	const stopPlayback = () => {
+		if (typeof window !== "undefined" && window.speechSynthesis) {
+			window.speechSynthesis.cancel();
+		}
+		if (audioRef.current) {
+			audioRef.current.pause();
+			audioRef.current = null;
+		}
+		if (playbackResolveRef.current) {
+			const resolve = playbackResolveRef.current;
+			playbackResolveRef.current = null;
+			resolve();
+		}
+	};
+
+	const stopReading = () => {
+		speechTokenRef.current += 1;
+		stopPlayback();
+		setIsReadingAll(false);
+		setActiveSentenceKey("");
+	};
+
+	// Preprocess and synthesize a sentence ahead of time. Results are cached and
+	// reused so the next sentence can be fetched while the current one is playing.
+	const prepareSpeech = async (rawText: string): Promise<PreparedSpeech> => {
+		let text = rawText;
+		try {
+			const refined = await invoke<string>("preprocess_tts_text", { text: rawText });
+			const cleaned = refined?.trim();
+			if (cleaned && cleaned.length > 0) {
+				text = cleaned;
+			}
+		} catch (error) {
+			setAppError((previous) => previous ?? `TTS preprocessing failed, reading raw text: ${String(error)}`);
+		}
+
+		let audio: SynthesizedSpeech | null = null;
+		try {
+			audio = await invoke<SynthesizedSpeech | null>("synthesize_speech", { text });
+		} catch (error) {
+			setAppError((previous) => previous ?? `Provider TTS failed, using built-in voice: ${String(error)}`);
+		}
+
+		return { text, audio };
+	};
+
+	const SPEECH_CACHE_LIMIT = 7;
+	const MAX_PREFETCH_AHEAD = 7;
+
+	const getPreparedSpeech = (rawText: string): Promise<PreparedSpeech> => {
+		const cache = speechCacheRef.current;
+		const existing = cache.get(rawText);
+		if (existing) {
+			return existing;
+		}
+
+		const entry = prepareSpeech(rawText);
+		cache.set(rawText, entry);
+		while (cache.size > SPEECH_CACHE_LIMIT) {
+			const oldest = cache.keys().next().value;
+			if (oldest === undefined) {
+				break;
+			}
+			cache.delete(oldest);
+		}
+		return entry;
+	};
+
+	const playPrepared = (prepared: PreparedSpeech, token: number): Promise<void> =>
+		new Promise<void>((resolve) => {
+			const finish = () => {
+				if (playbackResolveRef.current === finish) {
+					playbackResolveRef.current = null;
+				}
+				resolve();
+			};
+			playbackResolveRef.current = finish;
+
+			if (speechTokenRef.current !== token || typeof window === "undefined") {
+				finish();
+				return;
+			}
+
+			const playWithBrowserVoice = () => {
+				if (speechTokenRef.current !== token || !window.speechSynthesis) {
+					finish();
+					return;
+				}
+				const utterance = new SpeechSynthesisUtterance(prepared.text);
+				utterance.onend = finish;
+				utterance.onerror = finish;
+				window.speechSynthesis.speak(utterance);
+			};
+
+			if (prepared.audio?.audioBase64) {
+				const element = new Audio(`data:${prepared.audio.mimeType};base64,${prepared.audio.audioBase64}`);
+				audioRef.current = element;
+				element.onended = finish;
+				element.onerror = () => {
+					if (audioRef.current === element) {
+						audioRef.current = null;
+					}
+					playWithBrowserVoice();
+				};
+				void element.play().catch(() => playWithBrowserVoice());
+				return;
+			}
+
+			playWithBrowserVoice();
+		});
+
+	const prepareAndPlay = async (rawText: string, token: number): Promise<void> => {
+		if (speechTokenRef.current !== token) {
+			return;
+		}
+
+		const prepared = await getPreparedSpeech(rawText);
+		if (speechTokenRef.current !== token) {
+			return;
+		}
+
+		await playPrepared(prepared, token);
+	};
+
 	const speakSentence = (pageIndex: number, sentence: PreviewSentence) => {
+		if (typeof window === "undefined") {
+			return;
+		}
+
 		const key = `${pageIndex}:${sentence.id}`;
 
-		if (typeof window === "undefined" || !window.speechSynthesis) {
-			setAppError((previous) => previous ?? "Text-to-speech is not available in this environment.");
+		if (!isReadingAll && activeSentenceKey === key) {
+			stopReading();
 			return;
 		}
 
-		const synth = window.speechSynthesis;
-		synth.cancel();
-
-		if (activeSentenceKey === key) {
-			setActiveSentenceKey("");
-			return;
-		}
-
+		stopReading();
+		const token = (speechTokenRef.current += 1);
 		setActiveSentenceKey(key);
 
-		const utterance = new SpeechSynthesisUtterance(sentence.text);
-		utterance.onend = () => {
-			setActiveSentenceKey((previous) => (previous === key ? "" : previous));
-		};
-		utterance.onerror = () => {
-			setActiveSentenceKey((previous) => (previous === key ? "" : previous));
-		};
-		synth.speak(utterance);
+		void prepareAndPlay(sentence.text, token).then(() => {
+			if (speechTokenRef.current === token) {
+				setActiveSentenceKey((previous) => (previous === key ? "" : previous));
+			}
+		});
+	};
+
+	const readAllSentences = () => {
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		if (isReadingAll) {
+			stopReading();
+			return;
+		}
+
+		const queue: Array<{ key: string; text: string }> = [];
+		for (const page of previewPages) {
+			for (const sentence of page.sentences ?? []) {
+				queue.push({ key: `${page.index}:${sentence.id}`, text: sentence.text });
+			}
+		}
+
+		if (!queue.length) {
+			return;
+		}
+
+		stopReading();
+		const token = (speechTokenRef.current += 1);
+		setIsReadingAll(true);
+
+		void (async () => {
+			let playIndex = 0;
+			let prefetchIndex = 0;
+			let prefetching = false;
+
+			// Serially prefetch ahead: fire the next request only once the previous
+			// output is received, keeping at most MAX_PREFETCH_AHEAD audios buffered.
+			const pumpPrefetch = () => {
+				if (speechTokenRef.current !== token || prefetching || prefetchIndex >= queue.length) {
+					return;
+				}
+				if (prefetchIndex - playIndex >= MAX_PREFETCH_AHEAD) {
+					return;
+				}
+
+				prefetching = true;
+				const requestIndex = prefetchIndex;
+				prefetchIndex += 1;
+				void getPreparedSpeech(queue[requestIndex].text).finally(() => {
+					prefetching = false;
+					pumpPrefetch();
+				});
+			};
+
+			pumpPrefetch();
+
+			for (playIndex = 0; playIndex < queue.length; playIndex += 1) {
+				if (speechTokenRef.current !== token) {
+					break;
+				}
+
+				// Playback advanced, free a slot in the prefetch window.
+				pumpPrefetch();
+
+				const item = queue[playIndex];
+				setActiveSentenceKey(item.key);
+				const prepared = await getPreparedSpeech(item.text);
+				if (speechTokenRef.current !== token) {
+					break;
+				}
+				await playPrepared(prepared, token);
+			}
+
+			if (speechTokenRef.current === token) {
+				setIsReadingAll(false);
+				setActiveSentenceKey("");
+			}
+		})();
 	};
 
 	const sendChatMessage = async () => {
@@ -829,7 +1050,20 @@ function App() {
 					<article className="panel panel-preview">
 						<div className="panel-header">
 							<h2>Preview</h2>
-							{renderedDocument ? <span className="status">{previewPages.length} page(s)</span> : <span className="status">{renderableFiles.length} previewable</span>}
+							<div className="preview-header-actions">
+								{renderedDocument ? <span className="status">{previewPages.length} page(s)</span> : <span className="status">{renderableFiles.length} previewable</span>}
+								{renderedDocument && previewPages.some((page) => page.sentences?.length) ? (
+									<button
+										type="button"
+										className={`play-btn ${isReadingAll ? "is-playing" : ""}`}
+										onClick={readAllSentences}
+										aria-label={isReadingAll ? "Stop reading the file" : "Read the file aloud"}
+										title={isReadingAll ? "Stop reading the file" : "Read the file aloud"}
+									>
+										{isReadingAll ? "■ Stop" : "▶ Read"}
+									</button>
+								) : null}
+							</div>
 						</div>
 						<div className="panel-body scroll-y preview-body">
 							{!activeSessionDetails ? <p className="empty-note">Open a folder to preview Markdown, PDF, DOCX, and PPTX files.</p> : null}

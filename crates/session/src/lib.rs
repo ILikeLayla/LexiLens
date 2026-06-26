@@ -58,6 +58,18 @@ pub struct PersistedAppConfig {
   pub api_key: String,
   pub base_url: String,
   pub model: String,
+  #[serde(default = "default_tts_model")]
+  pub tts_model: String,
+  #[serde(default = "default_tts_voice")]
+  pub tts_voice: String,
+}
+
+fn default_tts_model() -> String {
+  "gemini-2.5-flash-preview-tts".to_string()
+}
+
+fn default_tts_voice() -> String {
+  "Kore".to_string()
 }
 
 impl Default for PersistedAppConfig {
@@ -67,6 +79,8 @@ impl Default for PersistedAppConfig {
       api_key: String::new(),
       base_url: "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
       model: "gemini-2.5-flash".to_string(),
+      tts_model: default_tts_model(),
+      tts_voice: default_tts_voice(),
     }
   }
 }

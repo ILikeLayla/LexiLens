@@ -1,3 +1,5 @@
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path};
@@ -163,7 +165,11 @@ fn extract_response_text(content: serde_json::Value) -> Option<String> {
     }
 }
 
-async fn call_openai_compatible_chat(config: &PersistedAppConfig, request: &ChatRequest) -> Result<String, String> {
+async fn send_openai_compatible_messages(
+    config: &PersistedAppConfig,
+    messages: Vec<OpenAiCompatibleMessage>,
+    temperature: f32,
+) -> Result<String, String> {
     let mut base_url = config.base_url.trim().trim_end_matches('/').to_string();
     if base_url.is_empty() {
         return Err("Missing baseUrl for openai-compatible provider".to_string());
@@ -172,6 +178,44 @@ async fn call_openai_compatible_chat(config: &PersistedAppConfig, request: &Chat
         base_url.push_str("/chat/completions");
     }
 
+    let response = reqwest::Client::new()
+        .post(base_url)
+        .header(CONTENT_TYPE, "application/json")
+        .header(AUTHORIZATION, format!("Bearer {}", config.api_key.trim()))
+        .json(&OpenAiCompatibleChatRequest {
+            model: config.model.clone(),
+            messages,
+            temperature,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("Failed to call provider API: {error}"))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "<unreadable error body>".to_string());
+        return Err(format!("Provider API returned {status}: {body}"));
+    }
+
+    let parsed_response: OpenAiCompatibleChatResponse = response
+        .json()
+        .await
+        .map_err(|error| format!("Failed to parse provider response: {error}"))?;
+
+    let first_choice = parsed_response
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Provider response did not contain choices".to_string())?;
+
+    extract_response_text(first_choice.message.content)
+        .ok_or_else(|| "Provider response did not contain readable text content".to_string())
+}
+
+async fn call_openai_compatible_chat(config: &PersistedAppConfig, request: &ChatRequest) -> Result<String, String> {
     let session_title = request.session_title.as_deref().unwrap_or("(none)");
     let session_path = request.session_path.as_deref().unwrap_or("(none)");
     let file_name = request.active_file_name.as_deref().unwrap_or("(none)");
@@ -203,41 +247,268 @@ async fn call_openai_compatible_chat(config: &PersistedAppConfig, request: &Chat
         content: contextual_user_prompt,
     });
 
+    send_openai_compatible_messages(config, messages, 0.3).await
+}
+
+async fn refine_text_for_speech(config: &PersistedAppConfig, text: &str) -> Result<String, String> {
+    let system_prompt = "You normalize text so a text-to-speech engine reads it naturally. \
+Rewrite the user's text fixing artifacts from PDF or document extraction: join words split across line breaks, \
+remove stray hyphenation, collapse odd spacing, and expand abbreviations and symbols into spoken words \
+(for example: 'Dr.' becomes 'Doctor', 'e.g.' becomes 'for example', 'Fig.' becomes 'Figure', '%' becomes 'percent', \
+'&' becomes 'and', 'No.' becomes 'Number'). Keep the original meaning and language. Do not summarize, translate, \
+explain, add commentary, or use markdown. Respond with ONLY the cleaned text.";
+
+    let messages = vec![
+        OpenAiCompatibleMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+        },
+        OpenAiCompatibleMessage {
+            role: "user".to_string(),
+            content: text.to_string(),
+        },
+    ];
+
+    send_openai_compatible_messages(config, messages, 0.2).await
+}
+
+#[tauri::command]
+async fn preprocess_tts_text(app_handle: AppHandle, text: String) -> Result<String, String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("Text cannot be empty".to_string());
+    }
+
+    let config_file_path = app_config_file_path(&app_handle)?;
+    let config = session::load_app_config(&config_file_path)?;
+    let provider = config.provider.trim().to_ascii_lowercase();
+
+    if provider != "openai-compatible" {
+        // No remote LLM available for preprocessing; read the original text as-is.
+        return Ok(trimmed.to_string());
+    }
+
+    if provider_requires_api_key(&provider) && config.api_key.trim().is_empty() {
+        return Err("Missing required setting: apiKey".to_string());
+    }
+
+    let refined = refine_text_for_speech(&config, trimmed).await?;
+    let refined = refined.trim();
+    if refined.is_empty() {
+        return Ok(trimmed.to_string());
+    }
+
+    Ok(refined.to_string())
+}
+
+#[derive(Serialize)]
+struct GeminiTtsRequest {
+    contents: Vec<GeminiContent>,
+    #[serde(rename = "generationConfig")]
+    generation_config: GeminiGenerationConfig,
+}
+
+#[derive(Serialize)]
+struct GeminiContent {
+    parts: Vec<GeminiTextPart>,
+}
+
+#[derive(Serialize)]
+struct GeminiTextPart {
+    text: String,
+}
+
+#[derive(Serialize)]
+struct GeminiGenerationConfig {
+    #[serde(rename = "responseModalities")]
+    response_modalities: Vec<String>,
+    #[serde(rename = "speechConfig")]
+    speech_config: GeminiSpeechConfig,
+}
+
+#[derive(Serialize)]
+struct GeminiSpeechConfig {
+    #[serde(rename = "voiceConfig")]
+    voice_config: GeminiVoiceConfig,
+}
+
+#[derive(Serialize)]
+struct GeminiVoiceConfig {
+    #[serde(rename = "prebuiltVoiceConfig")]
+    prebuilt_voice_config: GeminiPrebuiltVoiceConfig,
+}
+
+#[derive(Serialize)]
+struct GeminiPrebuiltVoiceConfig {
+    #[serde(rename = "voiceName")]
+    voice_name: String,
+}
+
+#[derive(Deserialize)]
+struct GeminiTtsResponse {
+    #[serde(default)]
+    candidates: Vec<GeminiCandidate>,
+}
+
+#[derive(Deserialize)]
+struct GeminiCandidate {
+    content: GeminiResponseContent,
+}
+
+#[derive(Deserialize)]
+struct GeminiResponseContent {
+    #[serde(default)]
+    parts: Vec<GeminiResponsePart>,
+}
+
+#[derive(Deserialize)]
+struct GeminiResponsePart {
+    #[serde(rename = "inlineData")]
+    inline_data: Option<GeminiInlineData>,
+}
+
+#[derive(Deserialize)]
+struct GeminiInlineData {
+    #[serde(rename = "mimeType")]
+    mime_type: String,
+    data: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SynthesizedSpeech {
+    mime_type: String,
+    audio_base64: String,
+}
+
+fn parse_pcm_sample_rate(mime_type: &str) -> u32 {
+    mime_type
+        .split(';')
+        .find_map(|part| part.trim().strip_prefix("rate="))
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(24_000)
+}
+
+fn pcm_to_wav(pcm: &[u8], sample_rate: u32) -> Vec<u8> {
+    let channels: u16 = 1;
+    let bits_per_sample: u16 = 16;
+    let block_align = channels * (bits_per_sample / 8);
+    let byte_rate = sample_rate * u32::from(block_align);
+    let data_len = pcm.len() as u32;
+
+    let mut buffer = Vec::with_capacity(44 + pcm.len());
+    buffer.extend_from_slice(b"RIFF");
+    buffer.extend_from_slice(&(36 + data_len).to_le_bytes());
+    buffer.extend_from_slice(b"WAVE");
+    buffer.extend_from_slice(b"fmt ");
+    buffer.extend_from_slice(&16u32.to_le_bytes());
+    buffer.extend_from_slice(&1u16.to_le_bytes());
+    buffer.extend_from_slice(&channels.to_le_bytes());
+    buffer.extend_from_slice(&sample_rate.to_le_bytes());
+    buffer.extend_from_slice(&byte_rate.to_le_bytes());
+    buffer.extend_from_slice(&block_align.to_le_bytes());
+    buffer.extend_from_slice(&bits_per_sample.to_le_bytes());
+    buffer.extend_from_slice(b"data");
+    buffer.extend_from_slice(&data_len.to_le_bytes());
+    buffer.extend_from_slice(pcm);
+    buffer
+}
+
+async fn call_gemini_tts(config: &PersistedAppConfig, text: &str) -> Result<SynthesizedSpeech, String> {
+    let trimmed_base = config.base_url.trim().trim_end_matches('/');
+    let native_base = trimmed_base.strip_suffix("/openai").unwrap_or(trimmed_base);
+    let tts_model = config.tts_model.trim();
+    let voice = if config.tts_voice.trim().is_empty() {
+        "Kore"
+    } else {
+        config.tts_voice.trim()
+    };
+
+    let url = format!("{native_base}/models/{tts_model}:generateContent");
+
+    let body = GeminiTtsRequest {
+        contents: vec![GeminiContent {
+            parts: vec![GeminiTextPart { text: text.to_string() }],
+        }],
+        generation_config: GeminiGenerationConfig {
+            response_modalities: vec!["AUDIO".to_string()],
+            speech_config: GeminiSpeechConfig {
+                voice_config: GeminiVoiceConfig {
+                    prebuilt_voice_config: GeminiPrebuiltVoiceConfig {
+                        voice_name: voice.to_string(),
+                    },
+                },
+            },
+        },
+    };
+
     let response = reqwest::Client::new()
-        .post(base_url)
+        .post(url)
         .header(CONTENT_TYPE, "application/json")
-        .header(AUTHORIZATION, format!("Bearer {}", config.api_key.trim()))
-        .json(&OpenAiCompatibleChatRequest {
-            model: config.model.clone(),
-            messages,
-            temperature: 0.3,
-        })
+        .header("x-goog-api-key", config.api_key.trim())
+        .json(&body)
         .send()
         .await
-        .map_err(|error| format!("Failed to call provider API: {error}"))?;
+        .map_err(|error| format!("Failed to call provider TTS API: {error}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response
+        let error_body = response
             .text()
             .await
             .unwrap_or_else(|_| "<unreadable error body>".to_string());
-        return Err(format!("Provider API returned {status}: {body}"));
+        return Err(format!("Provider TTS API returned {status}: {error_body}"));
     }
 
-    let parsed_response: OpenAiCompatibleChatResponse = response
+    let parsed: GeminiTtsResponse = response
         .json()
         .await
-        .map_err(|error| format!("Failed to parse provider response: {error}"))?;
+        .map_err(|error| format!("Failed to parse provider TTS response: {error}"))?;
 
-    let first_choice = parsed_response
-        .choices
+    let inline_data = parsed
+        .candidates
         .into_iter()
-        .next()
-        .ok_or_else(|| "Provider response did not contain choices".to_string())?;
+        .flat_map(|candidate| candidate.content.parts)
+        .find_map(|part| part.inline_data)
+        .ok_or_else(|| "Provider TTS response did not contain audio data".to_string())?;
 
-    extract_response_text(first_choice.message.content)
-        .ok_or_else(|| "Provider response did not contain readable text content".to_string())
+    let pcm = BASE64_STANDARD
+        .decode(inline_data.data.as_bytes())
+        .map_err(|error| format!("Failed to decode provider audio: {error}"))?;
+
+    let sample_rate = parse_pcm_sample_rate(&inline_data.mime_type);
+    let wav = pcm_to_wav(&pcm, sample_rate);
+
+    Ok(SynthesizedSpeech {
+        mime_type: "audio/wav".to_string(),
+        audio_base64: BASE64_STANDARD.encode(wav),
+    })
+}
+
+#[tauri::command]
+async fn synthesize_speech(app_handle: AppHandle, text: String) -> Result<Option<SynthesizedSpeech>, String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("Text cannot be empty".to_string());
+    }
+
+    let config_file_path = app_config_file_path(&app_handle)?;
+    let config = session::load_app_config(&config_file_path)?;
+
+    // Provider-native TTS is currently available for Gemini's API. When it is not
+    // configured/available, return None so the frontend falls back to its built-in voice.
+    if config.tts_model.trim().is_empty() {
+        return Ok(None);
+    }
+    if !config.base_url.contains("generativelanguage.googleapis.com") {
+        return Ok(None);
+    }
+    if config.api_key.trim().is_empty() {
+        return Err("Missing required setting: apiKey".to_string());
+    }
+
+    let audio = call_gemini_tts(&config, trimmed).await?;
+    Ok(Some(audio))
 }
 
 #[tauri::command]
@@ -291,7 +562,9 @@ pub fn run() {
             load_app_config,
             save_app_config,
             render_active_file,
-            chat_with_context
+            chat_with_context,
+            preprocess_tts_text,
+            synthesize_speech
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
