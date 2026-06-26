@@ -40,6 +40,7 @@ type FolderSession = {
 type PersistedAppState = {
 	sessionCollapsed: boolean;
 	filesCollapsed: boolean;
+	chatCollapsed: boolean;
 	activeSession: string;
 	activeFile: string;
 	sessions: SessionItem[];
@@ -361,6 +362,7 @@ async function renderPdfToPages(previewDocument: RenderedDocument): Promise<Rend
 function App() {
 	const [sessionCollapsed, setSessionCollapsed] = useState(false);
 	const [filesCollapsed, setFilesCollapsed] = useState(false);
+	const [chatCollapsed, setChatCollapsed] = useState(false);
 	const [showSessionMenu, setShowSessionMenu] = useState(false);
 	const [activeSession, setActiveSession] = useState("");
 	const [activeFile, setActiveFile] = useState("");
@@ -451,6 +453,7 @@ function App() {
 
 				setSessionCollapsed(persistedState.sessionCollapsed);
 				setFilesCollapsed(persistedState.filesCollapsed);
+				setChatCollapsed(persistedState.chatCollapsed ?? false);
 				setActiveSession(persistedState.activeSession);
 				setActiveFile(persistedState.activeFile);
 				setSessions(persistedState.sessions);
@@ -481,6 +484,7 @@ function App() {
 		const persistedState: PersistedAppState = {
 			sessionCollapsed,
 			filesCollapsed,
+			chatCollapsed,
 			activeSession,
 			activeFile,
 			sessions,
@@ -490,7 +494,7 @@ function App() {
 		void invoke("save_app_state", { state: persistedState }).catch((error) => {
 			setAppError((previous) => previous ?? `Failed to save app state: ${String(error)}`);
 		});
-	}, [activeFile, activeSession, appStateReady, filesBySession, filesCollapsed, sessionCollapsed, sessions]);
+	}, [activeFile, activeSession, appStateReady, chatCollapsed, filesBySession, filesCollapsed, sessionCollapsed, sessions]);
 
 	useEffect(() => {
 		if (!currentFiles.length) {
@@ -1000,8 +1004,8 @@ function App() {
 			</section>
 
 			<section className="content-shell">
-				<div className="content-grid">
-					<article className="panel panel-preview">
+				<div className={`content-grid ${chatCollapsed ? "content-grid-single" : ""}`}>
+					<article className={`panel panel-preview ${chatCollapsed ? "is-expanded" : ""}`}>
 						<div className="panel-header">
 							<h2>Preview</h2>
 							<div className="preview-header-actions">
@@ -1020,6 +1024,17 @@ function App() {
 							</div>
 						</div>
 						<div className="panel-body scroll-y preview-body">
+							{chatCollapsed ? (
+								<button
+									className="icon-btn chat-floating-toggle"
+									type="button"
+									onClick={() => setChatCollapsed(false)}
+									aria-label="Expand chat"
+									title="Expand chat"
+								>
+									Chat
+								</button>
+							) : null}
 							{!activeSessionDetails ? <p className="empty-note">Open a folder to preview Markdown, PDF, DOCX, and PPTX files.</p> : null}
 							{previewError ? <p className="error-note">{previewError}</p> : null}
 							{isLoadingPreview ? <p className="empty-note">Rendering preview in backend...</p> : null}
@@ -1059,38 +1074,51 @@ function App() {
 						</div>
 					</article>
 
-					<aside className="panel panel-chat">
-						<div className="panel-header">
-							<h2>Chat</h2>
-						</div>
-						<div className="panel-body chat-thread">
-							{messages.map((message) => (
-								<div key={message.id} className={`chat-bubble ${message.role}`}>
-									{message.text}
+					{!chatCollapsed ? (
+						<aside className="panel panel-chat">
+							<div className="panel-header">
+								<h2>Chat</h2>
+								<div className="panel-header-actions">
+									<button
+										className="icon-btn"
+										type="button"
+										onClick={() => setChatCollapsed(true)}
+										aria-label="Collapse chat"
+										title="Collapse chat"
+									>
+										»
+									</button>
 								</div>
-							))}
-							{chatPending ? <div className="chat-bubble assistant">Thinking...</div> : null}
-						</div>
-						<div className="chat-input-wrap">
-							<input
-								type="text"
-								placeholder="Ask to rewrite, summarize, or explain with context..."
-								aria-label="Chat input"
-								value={chatInput}
-								disabled={chatPending}
-								onChange={(event) => setChatInput(event.target.value)}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") {
-										event.preventDefault();
-										void sendChatMessage();
-									}
-								}}
-							/>
-							<button type="button" onClick={() => void sendChatMessage()} disabled={chatPending || !chatInput.trim()}>
-								{chatPending ? "Sending..." : "Send"}
-							</button>
-						</div>
-					</aside>
+							</div>
+							<div className="panel-body chat-thread">
+								{messages.map((message) => (
+									<div key={message.id} className={`chat-bubble ${message.role}`}>
+										{message.text}
+									</div>
+								))}
+								{chatPending ? <div className="chat-bubble assistant">Thinking...</div> : null}
+							</div>
+							<div className="chat-input-wrap">
+								<input
+									type="text"
+									placeholder="Ask to rewrite, summarize, or explain with context..."
+									aria-label="Chat input"
+									value={chatInput}
+									disabled={chatPending}
+									onChange={(event) => setChatInput(event.target.value)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter") {
+											event.preventDefault();
+											void sendChatMessage();
+										}
+									}}
+								/>
+								<button type="button" onClick={() => void sendChatMessage()} disabled={chatPending || !chatInput.trim()}>
+									{chatPending ? "Sending..." : "Send"}
+								</button>
+							</div>
+						</aside>
+					) : null}
 				</div>
 			</section>
 
