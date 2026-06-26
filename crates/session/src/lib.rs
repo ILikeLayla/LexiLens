@@ -62,6 +62,10 @@ pub struct PersistedAppConfig {
   pub tts_model: String,
   #[serde(default = "default_tts_voice")]
   pub tts_voice: String,
+  #[serde(default = "default_tts_mode")]
+  pub tts_mode: String,
+  #[serde(default = "default_speech_cache_limit")]
+  pub speech_cache_limit: u32,
 }
 
 fn default_tts_model() -> String {
@@ -70,6 +74,14 @@ fn default_tts_model() -> String {
 
 fn default_tts_voice() -> String {
   "Kore".to_string()
+}
+
+fn default_tts_mode() -> String {
+  "remote".to_string()
+}
+
+fn default_speech_cache_limit() -> u32 {
+  7
 }
 
 impl Default for PersistedAppConfig {
@@ -81,6 +93,8 @@ impl Default for PersistedAppConfig {
       model: "gemini-2.5-flash".to_string(),
       tts_model: default_tts_model(),
       tts_voice: default_tts_voice(),
+      tts_mode: default_tts_mode(),
+      speech_cache_limit: default_speech_cache_limit(),
     }
   }
 }

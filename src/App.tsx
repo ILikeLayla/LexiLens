@@ -6,6 +6,13 @@ import type { TextContent } from "pdfjs-dist/types/src/display/api";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "./App.css";
+import {
+	collectMissingConfigFields,
+	DEFAULT_APP_CONFIG,
+	normalizeConfig,
+	type PersistedAppConfig,
+	SettingsPanel,
+} from "./Settings";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -37,13 +44,6 @@ type PersistedAppState = {
 	activeFile: string;
 	sessions: SessionItem[];
 	filesBySession: Record<string, SessionFile[]>;
-};
-
-type PersistedAppConfig = {
-	provider: string;
-	apiKey: string;
-	baseUrl: string;
-	model: string;
 };
 
 type ChatMessage = {
@@ -319,69 +319,6 @@ function dataUrlToUint8Array(dataUrl: string): Uint8Array {
 	return bytes;
 }
 
-function providerRequiresApiKey(provider: string): boolean {
-	const normalized = provider.trim().toLowerCase();
-	if (!normalized) {
-		return false;
-	}
-
-	return !normalized.includes("local");
-}
-
-function collectMissingConfigFields(config: PersistedAppConfig): Array<keyof PersistedAppConfig> {
-	const missingFields: Array<keyof PersistedAppConfig> = [];
-
-	if (!config.provider.trim()) {
-		missingFields.push("provider");
-	}
-
-	if (providerRequiresApiKey(config.provider) && !config.apiKey.trim()) {
-		missingFields.push("apiKey");
-	}
-
-	if (config.provider.trim().toLowerCase() === "openai-compatible" && !config.baseUrl.trim()) {
-		missingFields.push("baseUrl");
-	}
-
-	if (!config.model.trim()) {
-		missingFields.push("model");
-	}
-
-	return missingFields;
-}
-
-async function ensureRequiredConfigAtStartup(): Promise<void> {
-	const loadedConfig = await invoke<PersistedAppConfig>("load_app_config");
-	const config = { ...loadedConfig };
-	const missingFields = collectMissingConfigFields(config);
-
-	if (!missingFields.length) {
-		return;
-	}
-
-	const fieldPrompts: Record<keyof PersistedAppConfig, string> = {
-		provider: "Enter LLM provider (for example: openai-compatible, local):",
-		apiKey: "Enter API key for the configured provider:",
-		baseUrl: "Enter base URL for openai-compatible provider:",
-		model: "Enter default model name:",
-	};
-
-	for (const field of missingFields) {
-		const value = window.prompt(fieldPrompts[field], config[field]);
-		if (value === null) {
-			throw new Error(`Missing required setting: ${field}`);
-		}
-		config[field] = value.trim();
-	}
-
-	const missingAfterPrompt = collectMissingConfigFields(config);
-	if (missingAfterPrompt.length) {
-		throw new Error(`Missing required settings: ${missingAfterPrompt.join(", ")}`);
-	}
-
-	await invoke("save_app_config", { config });
-}
-
 async function renderPdfToPages(previewDocument: RenderedDocument): Promise<RenderedPage[]> {
 	if (!previewDocument.pdfDataUrl) {
 		return previewDocument.pages;
@@ -443,6 +380,9 @@ function App() {
 	const speechCacheRef = useRef<Map<string, Promise<PreparedSpeech>>>(new Map());
 	const [appError, setAppError] = useState<string | null>(null);
 	const [previewError, setPreviewError] = useState("");
+	const [appConfig, setAppConfig] = useState<PersistedAppConfig>(DEFAULT_APP_CONFIG);
+	const [showSettings, setShowSettings] = useState(false);
+	const [settingsError, setSettingsError] = useState<string | null>(null);
 	const [messages, setMessages] = useState<ChatMessage[]>([
 		{
 			id: "m-1",
@@ -461,10 +401,22 @@ function App() {
 
 		const loadAndValidateConfig = async () => {
 			try {
-				await ensureRequiredConfigAtStartup();
+				const loaded = await invoke<Partial<PersistedAppConfig>>("load_app_config");
+				if (cancelled) {
+					return;
+				}
+
+				const config = normalizeConfig(loaded);
+				setAppConfig(config);
+
+				const missingFields = collectMissingConfigFields(config);
+				if (missingFields.length) {
+					setSettingsError(`Some required settings are missing: ${missingFields.join(", ")}. Please complete them to continue.`);
+					setShowSettings(true);
+				}
 			} catch (error) {
 				if (!cancelled) {
-					setAppError(`Settings are incomplete: ${String(error)}`);
+					setAppError(`Failed to load settings: ${String(error)}`);
 				}
 			}
 		};
@@ -694,7 +646,7 @@ function App() {
 		return { text, audio };
 	};
 
-	const SPEECH_CACHE_LIMIT = 7;
+	const SPEECH_CACHE_LIMIT = Math.max(1, appConfig.speechCacheLimit);
 	const MAX_PREFETCH_AHEAD = 7;
 
 	const getPreparedSpeech = (rawText: string): Promise<PreparedSpeech> => {
@@ -926,15 +878,31 @@ function App() {
 			<section className={`panel panel-session ${sessionCollapsed ? "is-collapsed" : ""}`}>
 				<div className="panel-header">
 					{!sessionCollapsed && <h2>Sessions</h2>}
-					<button
-						className="icon-btn"
-						type="button"
-						onClick={() => setSessionCollapsed((previous) => !previous)}
-						aria-label={sessionCollapsed ? "Expand sessions" : "Collapse sessions"}
-						title={sessionCollapsed ? "Expand sessions" : "Collapse sessions"}
-					>
-						{sessionCollapsed ? "»" : "«"}
-					</button>
+					<div className="panel-header-actions">
+						{!sessionCollapsed && (
+							<button
+								className="icon-btn"
+								type="button"
+								onClick={() => {
+									setSettingsError(null);
+									setShowSettings(true);
+								}}
+								aria-label="Open settings"
+								title="Settings"
+							>
+								⚙
+							</button>
+						)}
+						<button
+							className="icon-btn"
+							type="button"
+							onClick={() => setSessionCollapsed((previous) => !previous)}
+							aria-label={sessionCollapsed ? "Expand sessions" : "Collapse sessions"}
+							title={sessionCollapsed ? "Expand sessions" : "Collapse sessions"}
+						>
+							{sessionCollapsed ? "»" : "«"}
+						</button>
+					</div>
 				</div>
 
 				<div className="panel-body scroll-y">
@@ -1106,6 +1074,23 @@ function App() {
 					</article>
 				</div>
 			</section>
+
+			{showSettings ? (
+				<SettingsPanel
+					config={appConfig}
+					initialError={settingsError}
+					onClose={() => {
+						setShowSettings(false);
+						setSettingsError(null);
+					}}
+					onSaved={(savedConfig) => {
+						setAppConfig(savedConfig);
+						setShowSettings(false);
+						setSettingsError(null);
+						speechCacheRef.current.clear();
+					}}
+				/>
+			) : null}
 		</main>
 	);
 }

@@ -495,6 +495,12 @@ async fn synthesize_speech(app_handle: AppHandle, text: String) -> Result<Option
     let config_file_path = app_config_file_path(&app_handle)?;
     let config = session::load_app_config(&config_file_path)?;
 
+    // When the user selects local/browser TTS, skip provider synthesis so the
+    // frontend falls back to its built-in voice.
+    if config.tts_mode.trim().eq_ignore_ascii_case("local") {
+        return Ok(None);
+    }
+
     // Provider-native TTS is currently available for Gemini's API. When it is not
     // configured/available, return None so the frontend falls back to its built-in voice.
     if config.tts_model.trim().is_empty() {
