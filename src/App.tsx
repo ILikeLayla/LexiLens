@@ -46,6 +46,21 @@ interface ChatMessage {
   text: string;
 }
 
+interface ChatRequest {
+  userMessage: string;
+  sessionTitle?: string;
+  sessionPath?: string;
+  activeFileName?: string;
+  activeFileStatus?: string;
+  recentMessages: ChatMessage[];
+}
+
+interface ChatResponse {
+  provider: string;
+  model: string;
+  text: string;
+}
+
 function App() {
   const [sessionCollapsed, setSessionCollapsed] = useState(false);
   const [filesCollapsed, setFilesCollapsed] = useState(false);
@@ -57,6 +72,15 @@ function App() {
 
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [filesBySession, setFilesBySession] = useState<Record<string, SessionFile[]>>({});
+  const [chatInput, setChatInput] = useState("");
+  const [chatPending, setChatPending] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "m-1",
+      role: "assistant",
+      text: "I can now call your configured LLM. Ask with the current session and file context.",
+    },
+  ]);
 
   function providerRequiresApiKey(provider: string) {
     const normalized = provider.trim().toLowerCase();
@@ -231,24 +255,58 @@ function App() {
 
   const currentFiles = filesBySession[activeSession] ?? [];
   const activeFileDetails = currentFiles.find((file) => file.id === activeFile) ?? currentFiles[0];
+  const activeSessionDetails = sessions.find((session) => session.id === activeSession);
 
-  const messages: ChatMessage[] = [
-    {
-      id: "m-1",
-      role: "assistant",
-      text: "I condensed the latest paragraph and kept all domain terms unchanged.",
-    },
-    {
-      id: "m-2",
+  async function sendChatMessage() {
+    const trimmedMessage = chatInput.trim();
+    if (!trimmedMessage || chatPending) {
+      return;
+    }
+
+    setChatPending(true);
+    setOpenError(null);
+
+    const userMessage: ChatMessage = {
+      id: `u-${Date.now()}`,
       role: "user",
-      text: "Great. Make it easier for grade 8 but keep the definitions section.",
-    },
-    {
-      id: "m-3",
-      role: "assistant",
-      text: "Done. I lowered sentence complexity and preserved the glossary block.",
-    },
-  ];
+      text: trimmedMessage,
+    };
+
+    const pendingMessages = [...messages, userMessage];
+    setMessages(pendingMessages);
+    setChatInput("");
+
+    try {
+      const request: ChatRequest = {
+        userMessage: trimmedMessage,
+        sessionTitle: activeSessionDetails?.title,
+        sessionPath: activeSessionDetails?.path,
+        activeFileName: activeFileDetails?.name,
+        activeFileStatus: activeFileDetails?.status,
+        recentMessages: pendingMessages.slice(-8),
+      };
+
+      const response = await invoke<ChatResponse>("chat_with_context", { request });
+      const assistantMessage: ChatMessage = {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        text: response.text,
+      };
+
+      setMessages((previous) => [...previous, assistantMessage]);
+    } catch (error) {
+      const errorMessage: ChatMessage = {
+        id: `e-${Date.now()}`,
+        role: "assistant",
+        text: `Failed to call LLM: ${String(error)}`,
+      };
+
+      setMessages((previous) => [...previous, errorMessage]);
+      setOpenError((previous) => previous ?? `Chat failed: ${String(error)}`);
+    } finally {
+      setChatPending(false);
+    }
+  }
 
   return (
     <main className="workspace">
@@ -367,10 +425,26 @@ function App() {
                   {message.text}
                 </div>
               ))}
+              {chatPending && <div className="chat-bubble assistant">Thinking...</div>}
             </div>
             <div className="chat-input-wrap">
-              <input type="text" placeholder="Ask to rewrite, summarize, or speak..." aria-label="Chat input" />
-              <button type="button">Send</button>
+              <input
+                type="text"
+                placeholder="Ask to rewrite, summarize, or explain with context..."
+                aria-label="Chat input"
+                value={chatInput}
+                disabled={chatPending}
+                onChange={(event) => setChatInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void sendChatMessage();
+                  }
+                }}
+              />
+              <button type="button" onClick={() => void sendChatMessage()} disabled={chatPending || !chatInput.trim()}>
+                {chatPending ? "Sending..." : "Send"}
+              </button>
             </div>
           </aside>
         </div>
