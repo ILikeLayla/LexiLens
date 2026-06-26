@@ -33,6 +33,13 @@ interface PersistedAppState {
   filesBySession: Record<string, SessionFile[]>;
 }
 
+interface PersistedAppConfig {
+  provider: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
 interface ChatMessage {
   id: string;
   role: "assistant" | "user";
@@ -50,6 +57,93 @@ function App() {
 
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [filesBySession, setFilesBySession] = useState<Record<string, SessionFile[]>>({});
+
+  function providerRequiresApiKey(provider: string) {
+    const normalized = provider.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    if (normalized.includes("local")) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function collectMissingConfigFields(config: PersistedAppConfig) {
+    const missingFields: Array<keyof PersistedAppConfig> = [];
+
+    if (!config.provider.trim()) {
+      missingFields.push("provider");
+    }
+
+    if (providerRequiresApiKey(config.provider) && !config.apiKey.trim()) {
+      missingFields.push("apiKey");
+    }
+
+    if (config.provider.trim().toLowerCase() === "openai-compatible" && !config.baseUrl.trim()) {
+      missingFields.push("baseUrl");
+    }
+
+    if (!config.model.trim()) {
+      missingFields.push("model");
+    }
+
+    return missingFields;
+  }
+
+  async function ensureRequiredConfigAtStartup() {
+    const loadedConfig = await invoke<PersistedAppConfig>("load_app_config");
+    const config = { ...loadedConfig };
+
+    const missingFields = collectMissingConfigFields(config);
+    if (!missingFields.length) {
+      return;
+    }
+
+    const fieldPrompts: Record<keyof PersistedAppConfig, string> = {
+      provider: "Enter LLM provider (for example: openai-compatible, local):",
+      apiKey: "Enter API key for the configured provider:",
+      baseUrl: "Enter base URL for openai-compatible provider:",
+      model: "Enter default model name:",
+    };
+
+    for (const field of missingFields) {
+      const value = window.prompt(fieldPrompts[field], config[field]);
+      if (value === null) {
+        throw new Error(`Missing required setting: ${field}`);
+      }
+      config[field] = value.trim();
+    }
+
+    const missingAfterPrompt = collectMissingConfigFields(config);
+    if (missingAfterPrompt.length) {
+      throw new Error(`Missing required settings: ${missingAfterPrompt.join(", ")}`);
+    }
+
+    await invoke("save_app_config", { config });
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAndValidateConfig() {
+      try {
+        await ensureRequiredConfigAtStartup();
+      } catch (error) {
+        if (!cancelled) {
+          setOpenError(`Settings are incomplete: ${String(error)}`);
+        }
+      }
+    }
+
+    void loadAndValidateConfig();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
