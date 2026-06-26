@@ -373,6 +373,8 @@ function App() {
 	const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 	const [chatPending, setChatPending] = useState(false);
 	const [chatInput, setChatInput] = useState("");
+	const [previewZoom, setPreviewZoom] = useState(100);
+	const [isDraggingPreview, setIsDraggingPreview] = useState(false);
 	const [previewPages, setPreviewPages] = useState<RenderedPage[]>([]);
 	const [renderedDocument, setRenderedDocument] = useState<RenderedDocument | null>(null);
 	const [activeSentenceKey, setActiveSentenceKey] = useState("");
@@ -381,6 +383,15 @@ function App() {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const playbackResolveRef = useRef<(() => void) | null>(null);
 	const speechCacheRef = useRef<Map<string, Promise<PreparedSpeech>>>(new Map());
+	const previewBodyRef = useRef<HTMLDivElement | null>(null);
+	const previewDragRef = useRef({
+		pointerId: -1,
+		startX: 0,
+		startY: 0,
+		scrollLeft: 0,
+		scrollTop: 0,
+		active: false,
+	});
 	const [appError, setAppError] = useState<string | null>(null);
 	const [previewError, setPreviewError] = useState("");
 	const [appConfig, setAppConfig] = useState<PersistedAppConfig>(DEFAULT_APP_CONFIG);
@@ -407,6 +418,66 @@ function App() {
 		}
 
 		setShowSessionMenu((previous) => !previous);
+	};
+
+	const updatePreviewZoom = (nextZoom: number) => {
+		setPreviewZoom(Math.max(60, Math.min(200, nextZoom)));
+	};
+
+	const handlePreviewPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+		if (previewZoom <= 100) {
+			return;
+		}
+
+		const target = event.target as HTMLElement;
+		if (target.closest(".chat-floating-toggle") || target.closest(".preview-zoom-controls") || target.closest("input") || target.closest("label")) {
+			return;
+		}
+
+		const container = previewBodyRef.current;
+		if (!container) {
+			return;
+		}
+
+		event.preventDefault();
+
+		previewDragRef.current = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			scrollLeft: container.scrollLeft,
+			scrollTop: container.scrollTop,
+			active: true,
+		};
+
+		try {
+			container.setPointerCapture(event.pointerId);
+		} catch {
+			// Ignore: pointer capture is best-effort.
+		}
+		setIsDraggingPreview(true);
+	};
+
+	const handlePreviewPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+		const container = previewBodyRef.current;
+		const dragState = previewDragRef.current;
+		if (!container || !dragState.active || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		container.scrollLeft = dragState.scrollLeft - (event.clientX - dragState.startX);
+		container.scrollTop = dragState.scrollTop - (event.clientY - dragState.startY);
+	};
+
+	const endPreviewDrag = (event?: React.PointerEvent<HTMLDivElement>) => {
+		const container = previewBodyRef.current;
+		if (container && event && previewDragRef.current.pointerId === event.pointerId && container.hasPointerCapture(event.pointerId)) {
+			container.releasePointerCapture(event.pointerId);
+		}
+
+		previewDragRef.current.active = false;
+		previewDragRef.current.pointerId = -1;
+		setIsDraggingPreview(false);
 	};
 
 	useEffect(() => {
@@ -1023,23 +1094,44 @@ function App() {
 								) : null}
 							</div>
 						</div>
-						<div className="panel-body scroll-y preview-body">
-							{chatCollapsed ? (
-								<button
-									className="icon-btn chat-floating-toggle"
-									type="button"
-									onClick={() => setChatCollapsed(false)}
-									aria-label="Expand chat"
-									title="Expand chat"
-								>
-									Chat
-								</button>
-							) : null}
+						{chatCollapsed ? (
+							<button
+								className="icon-btn chat-floating-toggle"
+								type="button"
+								onClick={() => setChatCollapsed(false)}
+								aria-label="Expand chat"
+								title="Expand chat"
+							>
+								Chat
+							</button>
+						) : null}
+						<div className="preview-zoom-controls" role="group" aria-label="Preview zoom controls">
+							<button className="preview-zoom-btn" type="button" onClick={() => updatePreviewZoom(previewZoom - 10)} aria-label="Zoom out">
+								-
+							</button>
+							<span className="preview-zoom-value">{previewZoom}%</span>
+							<button className="preview-zoom-btn" type="button" onClick={() => updatePreviewZoom(previewZoom + 10)} aria-label="Zoom in">
+								+
+							</button>
+						</div>
+						<div
+							ref={previewBodyRef}
+							className={`panel-body scroll-y preview-body ${previewZoom > 100 ? "is-pannable" : ""} ${isDraggingPreview ? "is-dragging" : ""}`}
+							onPointerDown={handlePreviewPointerDown}
+							onPointerMove={handlePreviewPointerMove}
+							onPointerUp={(event) => endPreviewDrag(event)}
+							onPointerCancel={(event) => endPreviewDrag(event)}
+							onLostPointerCapture={() => endPreviewDrag()}
+							onDragStart={(event) => event.preventDefault()}
+						>
 							{!activeSessionDetails ? <p className="empty-note">Open a folder to preview Markdown, PDF, DOCX, and PPTX files.</p> : null}
 							{previewError ? <p className="error-note">{previewError}</p> : null}
 							{isLoadingPreview ? <p className="empty-note">Rendering preview in backend...</p> : null}
 							{!isLoadingPreview && renderedDocument ? (
-								<div className="preview-stack">
+								<div
+									className={`preview-stack ${previewZoom > 100 ? "is-zoomed" : ""}`}
+									style={{ width: `${previewZoom}%` }}
+								>
 									{previewPages.map((page) => (
 										<figure className="preview-figure" key={`${renderedDocument.sourcePath}-${page.index}`}>
 											<div className="preview-page">
