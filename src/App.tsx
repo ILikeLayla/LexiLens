@@ -420,6 +420,7 @@ function App() {
 	const currentFiles = filesBySession[activeSession] ?? [];
 	const activeFileDetails = currentFiles.find((file) => file.id === activeFile) ?? currentFiles[0] ?? null;
 	const renderableFiles = currentFiles.filter((file) => isRenderableFile(file.name));
+	const previewTitle = activeFileDetails?.name ?? renderedDocument?.fileName ?? "Preview";
 
 	const handleSessionSelect = (sessionId: string) => {
 		setActiveSession(sessionId);
@@ -1146,7 +1147,7 @@ function App() {
 				>
 					<article className={`panel panel-preview ${chatCollapsed ? "is-expanded" : ""}`}>
 						<div className="panel-header">
-							<h2>Preview</h2>
+							<h2 title={previewTitle}>{previewTitle}</h2>
 							<div className="preview-header-actions">
 								{renderedDocument ? <span className="status">{previewPages.length} page(s)</span> : <span className="status">{renderableFiles.length} previewable</span>}
 								{renderedDocument && previewPages.some((page) => page.sentences?.length) ? (

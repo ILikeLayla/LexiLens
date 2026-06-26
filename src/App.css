@@ -134,6 +134,10 @@ body {
   text-transform: uppercase;
   color: var(--text-dim);
   font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .preview-header-actions {
