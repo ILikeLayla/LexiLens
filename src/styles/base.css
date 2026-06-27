@@ -1,0 +1,135 @@
+:root {
+    --bg: #050608;
+    --bg-raised: rgba(18, 20, 27, 0.78);
+    --bg-soft: rgba(30, 33, 42, 0.82);
+    --bg-pill: rgba(255, 255, 255, 0.04);
+    --line: rgba(255, 255, 255, 0.08);
+    --line-strong: rgba(255, 255, 255, 0.14);
+    --text: #f6f7fb;
+    --text-dim: #a3a8b8;
+    --accent: #63e1b9;
+    --accent-soft: rgba(99, 225, 185, 0.14);
+    --shadow-lg: 0 24px 80px rgba(0, 0, 0, 0.52);
+    --shadow-md: 0 18px 40px rgba(0, 0, 0, 0.28);
+
+    font-family: "Segoe UI Variable", "IBM Plex Sans", "Aptos", sans-serif;
+    color: var(--text);
+    background:
+        radial-gradient(circle at 15% 18%, rgba(255, 255, 255, 0.08) 0%, transparent 24%),
+        radial-gradient(circle at 86% 12%, rgba(99, 225, 185, 0.1) 0%, transparent 18%),
+        radial-gradient(circle at 78% 74%, rgba(255, 255, 255, 0.05) 0%, transparent 24%),
+        linear-gradient(180deg, #090a0d 0%, #040506 100%);
+    font-size: 16px;
+    line-height: 1.5;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100vh;
+}
+
+body {
+    overflow: hidden;
+    background: #040506;
+}
+
+input,
+button {
+    font: inherit;
+}
+
+input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    color: var(--text);
+    padding: 0.78rem 0.9rem;
+    backdrop-filter: blur(10px);
+}
+
+button {
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 0.72rem 0.95rem;
+    cursor: pointer;
+    transition:
+        border-color 0.18s ease,
+        background-color 0.18s ease,
+        transform 0.18s ease;
+}
+
+input::placeholder {
+    color: rgba(255, 255, 255, 0.28);
+}
+
+input:focus,
+button:focus,
+select:focus {
+    outline: none;
+}
+
+input:focus-visible,
+button:focus-visible,
+select:focus-visible {
+    border-color: rgba(99, 225, 185, 0.52);
+    box-shadow: 0 0 0 3px rgba(99, 225, 185, 0.12);
+}
+
+.scroll-y {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.icon-btn {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    background: var(--bg-pill);
+    color: var(--text);
+    border-radius: 999px;
+    cursor: pointer;
+    backdrop-filter: blur(14px);
+    transition:
+        border-color 0.18s ease,
+        background-color 0.18s ease,
+        transform 0.18s ease;
+}
+
+.chat-input-wrap button:hover,
+.icon-btn:hover {
+    border-color: rgba(99, 225, 185, 0.42);
+    background: rgba(255, 255, 255, 0.07);
+    transform: translateY(-1px);
+}
+
+.empty-note {
+    color: var(--text-dim);
+    font-size: 0.84rem;
+    margin: 0.85rem 0.5rem;
+}
+
+.error-note {
+    color: #f58f8f;
+    font-size: 0.8rem;
+    margin: 0.45rem 0.5rem 0.7rem;
+    word-break: break-word;
+}

@@ -1,0 +1,214 @@
+.preview-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.play-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.42rem 0.85rem;
+    border: 1px solid rgba(99, 225, 185, 0.28);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(99, 225, 185, 0.18), rgba(99, 225, 185, 0.1));
+    color: #d5fff1;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        background-color 0.18s ease,
+        border-color 0.18s ease,
+        transform 0.18s ease;
+}
+
+.play-btn:hover {
+    border-color: rgba(99, 225, 185, 0.52);
+    background: linear-gradient(180deg, rgba(99, 225, 185, 0.24), rgba(99, 225, 185, 0.12));
+    transform: translateY(-1px);
+}
+
+.play-btn.is-playing {
+    color: #ffb4a8;
+    border-color: rgba(255, 120, 100, 0.5);
+    background: rgba(255, 120, 100, 0.16);
+}
+
+.panel-preview,
+.panel-chat {
+    height: 100%;
+    min-height: 0;
+    border-right: 1px solid var(--line);
+}
+
+.panel-preview {
+    position: relative;
+    background: linear-gradient(180deg, rgba(17, 19, 27, 0.66), rgba(11, 12, 17, 0.58));
+    border-right: 1px solid var(--line);
+}
+
+.panel-preview.is-expanded {
+    width: 100%;
+    max-width: none;
+}
+
+.panel-preview .panel-body {
+    color: #dce3ea;
+    max-width: none;
+}
+
+.preview-body {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-width: none !important;
+    padding: 0.8rem 0.95rem 1.5rem;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+.preview-body.is-pannable {
+    cursor: grab;
+}
+
+.preview-body.is-pannable.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.chat-floating-toggle {
+    position: absolute;
+    top: 4.75rem;
+    right: 1rem;
+    z-index: 6;
+    width: auto;
+    min-width: 64px;
+    height: 44px;
+    padding: 0 1rem;
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(18, 20, 27, 0.92);
+    color: #f6f7fb;
+    transform: none;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34);
+}
+
+.chat-floating-toggle:hover,
+.chat-floating-toggle:focus-visible {
+    border-color: rgba(99, 225, 185, 0.42);
+    background: rgba(24, 27, 35, 0.96);
+    transform: none;
+}
+
+.panel-preview.is-expanded .preview-body {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+}
+
+.preview-zoom-controls {
+    position: absolute;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 7;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    background: rgba(18, 20, 27, 0.92);
+    color: var(--text);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(16px);
+}
+
+.preview-zoom-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.preview-zoom-value {
+    min-width: 3rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-align: center;
+    color: var(--text-dim);
+}
+
+.preview-stack {
+    display: grid;
+    gap: 1.2rem;
+    width: 100%;
+    max-width: 840px;
+    margin: 0 auto;
+}
+
+.panel-preview.is-expanded .preview-stack {
+    padding-top: 3.1rem;
+}
+
+.preview-stack.is-zoomed {
+    margin: 0;
+}
+
+.panel-preview.is-expanded .preview-stack {
+    max-width: none;
+}
+
+.preview-figure {
+    margin: 0;
+}
+
+.preview-page {
+    position: relative;
+    display: block;
+    line-height: 0;
+    overflow: hidden;
+}
+
+.preview-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0b0f13;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+}
+
+.preview-textlayer {
+    position: absolute;
+    inset: 0;
+    line-height: 1;
+}
+
+.preview-sentence {
+    position: absolute;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    appearance: none;
+}
+
+.preview-sentence:hover {
+    background: rgba(123, 216, 189, 0.18);
+}
+
+.preview-sentence.active {
+    background: rgba(123, 216, 189, 0.38);
+    box-shadow: 0 0 0 1px rgba(123, 216, 189, 0.55);
+}
+
+.preview-title {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: #ffffff;
+    font-weight: 600;
+}

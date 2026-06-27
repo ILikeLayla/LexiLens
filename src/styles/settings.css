@@ -1,0 +1,91 @@
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(2, 4, 8, 0.72);
+    backdrop-filter: blur(14px);
+}
+
+.settings-modal {
+    width: min(720px, 100%);
+    max-height: min(88vh, 860px);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 26px;
+    background: linear-gradient(180deg, rgba(16, 18, 24, 0.98), rgba(10, 11, 16, 0.98));
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+.settings-modal-header,
+.settings-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.1rem;
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+.settings-modal-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-modal-header h2,
+.settings-group h3 {
+    margin: 0;
+}
+
+.settings-modal-body {
+    padding: 1rem 1.1rem 1.15rem;
+}
+
+.settings-modal-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    justify-content: flex-end;
+}
+
+.settings-group {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.settings-group+.settings-group {
+    margin-top: 1.2rem;
+}
+
+.settings-field {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.settings-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.settings-field select {
+    width: 100%;
+    padding: 0.78rem 0.9rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-hint {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.action-btn.ghost {
+    background: transparent;
+}
