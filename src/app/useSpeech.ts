@@ -9,6 +9,7 @@ import type {
 } from "./types";
 
 const MAX_PREFETCH_AHEAD = 7;
+const REMOTE_TTS_RETRY_BACKOFF_MS = 350;
 
 type UseSpeechOptions = {
     appConfig: PersistedAppConfig;
@@ -30,6 +31,34 @@ type CachedSpeechEntry = {
     prepared: PreparedSpeech;
 };
 
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+
+async function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`Timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        void promise.then(
+            (value) => {
+                clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timer);
+                reject(error);
+            },
+        );
+    });
+}
+
 export function useSpeech({
     appConfig,
     previewPages,
@@ -45,6 +74,8 @@ export function useSpeech({
     );
     const speechCacheLimit = Math.max(1, appConfig.speechCacheLimit);
     const isLocalTts = appConfig.ttsMode.trim().toLowerCase() === "local";
+    const remoteTtsTimeoutMs = Math.max(500, appConfig.ttsRequestTimeoutMs);
+    const remoteTtsMaxRetries = Math.max(0, appConfig.ttsMaxRetries);
 
     const buildSpeechCacheSignature = (): string => {
         if (isLocalTts) {
@@ -58,6 +89,8 @@ export function useSpeech({
             `model:${appConfig.ttsModel.trim()}`,
             `voice:${appConfig.ttsVoice.trim()}`,
             `llm:${appConfig.preprocessTtsWithLlm ? "on" : "off"}`,
+            `timeout:${remoteTtsTimeoutMs}`,
+            `maxRetries:${remoteTtsMaxRetries}`,
         ].join(";");
     };
 
@@ -109,21 +142,40 @@ export function useSpeech({
             return { text, audio: null };
         }
 
-        let audio: SynthesizedSpeech | null = null;
-        try {
-            audio = await invoke<SynthesizedSpeech | null>(
-                "synthesize_speech",
-                { text },
-            );
-        } catch (error) {
-            setAppError(
-                (previous) =>
-                    previous ??
-                    `Provider TTS failed, using built-in voice: ${String(error)}`,
-            );
+        let attempts = 0;
+        let lastError: unknown = null;
+
+        while (attempts <= remoteTtsMaxRetries) {
+            attempts += 1;
+
+            try {
+                const audio = await withTimeout(
+                    invoke<SynthesizedSpeech | null>(
+                        "synthesize_speech",
+                        { text },
+                    ),
+                    remoteTtsTimeoutMs,
+                );
+                return { text, audio };
+            } catch (error) {
+                lastError = error;
+
+                if (attempts > remoteTtsMaxRetries) {
+                    break;
+                }
+
+                await delay(REMOTE_TTS_RETRY_BACKOFF_MS);
+            }
         }
 
-        return { text, audio };
+        setAppError(
+            (previous) =>
+                previous ??
+                `Provider TTS fallback to local after ${attempts} attempt(s): ${String(lastError)}`,
+        );
+
+        // Fallback to local voice when timeout/retry budget is exhausted.
+        return { text, audio: null };
     };
 
     const getPreparedSpeech = async (rawText: string): Promise<PreparedSpeech> => {

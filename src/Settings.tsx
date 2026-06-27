@@ -10,6 +10,8 @@ export type PersistedAppConfig = {
     ttsVoice: string;
     ttsMode: string;
     preprocessTtsWithLlm: boolean;
+    ttsRequestTimeoutMs: number;
+    ttsMaxRetries: number;
     speechCacheLimit: number;
 };
 
@@ -22,6 +24,8 @@ export const DEFAULT_APP_CONFIG: PersistedAppConfig = {
     ttsVoice: "Kore",
     ttsMode: "remote",
     preprocessTtsWithLlm: true,
+    ttsRequestTimeoutMs: 8000,
+    ttsMaxRetries: 2,
     speechCacheLimit: 7,
 };
 
@@ -50,6 +54,16 @@ export function normalizeConfig(
             typeof raw?.preprocessTtsWithLlm === "boolean"
                 ? raw.preprocessTtsWithLlm
                 : DEFAULT_APP_CONFIG.preprocessTtsWithLlm,
+        ttsRequestTimeoutMs:
+            typeof raw?.ttsRequestTimeoutMs === "number" &&
+            Number.isFinite(raw.ttsRequestTimeoutMs)
+                ? raw.ttsRequestTimeoutMs
+                : DEFAULT_APP_CONFIG.ttsRequestTimeoutMs,
+        ttsMaxRetries:
+            typeof raw?.ttsMaxRetries === "number" &&
+            Number.isFinite(raw.ttsMaxRetries)
+                ? raw.ttsMaxRetries
+                : DEFAULT_APP_CONFIG.ttsMaxRetries,
         speechCacheLimit:
             typeof raw?.speechCacheLimit === "number" &&
             Number.isFinite(raw.speechCacheLimit)
@@ -133,6 +147,14 @@ export function SettingsPanel({
                     ? "local"
                     : "remote",
             preprocessTtsWithLlm: Boolean(draft.preprocessTtsWithLlm),
+            ttsRequestTimeoutMs: Math.max(
+                500,
+                Math.min(120000, Math.round(draft.ttsRequestTimeoutMs) || 500),
+            ),
+            ttsMaxRetries: Math.max(
+                0,
+                Math.min(10, Math.round(draft.ttsMaxRetries) || 0),
+            ),
             speechCacheLimit: Math.max(
                 1,
                 Math.min(100, Math.round(draft.speechCacheLimit) || 1),
@@ -342,6 +364,53 @@ export function SettingsPanel({
                                             )
                                         }
                                     />
+                                </label>
+
+                                <label className="settings-field">
+                                    <span className="settings-label">
+                                        TTS request timeout (ms)
+                                    </span>
+                                    <input
+                                        type="number"
+                                        min={500}
+                                        max={120000}
+                                        step={100}
+                                        value={draft.ttsRequestTimeoutMs}
+                                        onChange={(event) =>
+                                            update(
+                                                "ttsRequestTimeoutMs",
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                    />
+                                    <span className="settings-hint">
+                                        Max wait per remote TTS attempt before
+                                        trying again or falling back to local.
+                                    </span>
+                                </label>
+
+                                <label className="settings-field">
+                                    <span className="settings-label">
+                                        TTS max retries
+                                    </span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={10}
+                                        step={1}
+                                        value={draft.ttsMaxRetries}
+                                        onChange={(event) =>
+                                            update(
+                                                "ttsMaxRetries",
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                    />
+                                    <span className="settings-hint">
+                                        Number of retries after the first
+                                        remote TTS attempt. Set 0 to disable
+                                        retries.
+                                    </span>
                                 </label>
                             </>
                         ) : null}

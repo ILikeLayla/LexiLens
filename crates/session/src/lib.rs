@@ -75,6 +75,10 @@ pub struct PersistedAppConfig {
     pub tts_mode: String,
     #[serde(default = "default_preprocess_tts_with_llm")]
     pub preprocess_tts_with_llm: bool,
+    #[serde(default = "default_tts_request_timeout_ms")]
+    pub tts_request_timeout_ms: u32,
+    #[serde(default = "default_tts_max_retries")]
+    pub tts_max_retries: u32,
     #[serde(default = "default_speech_cache_limit")]
     pub speech_cache_limit: u32,
 }
@@ -95,6 +99,14 @@ fn default_preprocess_tts_with_llm() -> bool {
     true
 }
 
+fn default_tts_request_timeout_ms() -> u32 {
+    8000
+}
+
+fn default_tts_max_retries() -> u32 {
+    2
+}
+
 fn default_speech_cache_limit() -> u32 {
     7
 }
@@ -110,6 +122,8 @@ impl Default for PersistedAppConfig {
             tts_voice: default_tts_voice(),
             tts_mode: default_tts_mode(),
             preprocess_tts_with_llm: default_preprocess_tts_with_llm(),
+            tts_request_timeout_ms: default_tts_request_timeout_ms(),
+            tts_max_retries: default_tts_max_retries(),
             speech_cache_limit: default_speech_cache_limit(),
         }
     }
