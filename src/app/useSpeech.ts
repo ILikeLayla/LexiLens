@@ -25,6 +25,11 @@ type UseSpeechResult = {
     clearSpeechCache: () => void;
 };
 
+type CachedSpeechEntry = {
+    signature: string;
+    prepared: PreparedSpeech;
+};
+
 export function useSpeech({
     appConfig,
     previewPages,
@@ -35,18 +40,25 @@ export function useSpeech({
     const speechTokenRef = useRef(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const playbackResolveRef = useRef<(() => void) | null>(null);
-    const speechCacheRef = useRef<Map<string, Promise<PreparedSpeech>>>(
+    const speechCacheRef = useRef<Map<string, Promise<CachedSpeechEntry>>>(
         new Map(),
     );
     const speechCacheLimit = Math.max(1, appConfig.speechCacheLimit);
     const isLocalTts = appConfig.ttsMode.trim().toLowerCase() === "local";
 
-    const buildSpeechCacheKey = (rawText: string): string => {
+    const buildSpeechCacheSignature = (): string => {
         if (isLocalTts) {
-            return `local:${appConfig.preprocessTtsWithLlm ? "llm-on" : "llm-off"}:${rawText}`;
+            return `mode:local;llm:${appConfig.preprocessTtsWithLlm ? "on" : "off"}`;
         }
 
-        return `remote:${appConfig.ttsModel}:${appConfig.ttsVoice}:${appConfig.preprocessTtsWithLlm ? "llm-on" : "llm-off"}:${rawText}`;
+        return [
+            "mode:remote",
+            `provider:${appConfig.provider.trim().toLowerCase()}`,
+            `base:${appConfig.baseUrl.trim()}`,
+            `model:${appConfig.ttsModel.trim()}`,
+            `voice:${appConfig.ttsVoice.trim()}`,
+            `llm:${appConfig.preprocessTtsWithLlm ? "on" : "off"}`,
+        ].join(";");
     };
 
     const stopPlayback = () => {
@@ -114,16 +126,25 @@ export function useSpeech({
         return { text, audio };
     };
 
-    const getPreparedSpeech = (rawText: string): Promise<PreparedSpeech> => {
-        const cacheKey = buildSpeechCacheKey(rawText);
+    const getPreparedSpeech = async (rawText: string): Promise<PreparedSpeech> => {
+        const activeSignature = buildSpeechCacheSignature();
         const cache = speechCacheRef.current;
-        const existing = cache.get(cacheKey);
+        const existing = cache.get(rawText);
         if (existing) {
-            return existing;
+            const cached = await existing;
+            if (cached.signature === activeSignature) {
+                return cached.prepared;
+            }
+
+            // Settings changed (for example local -> remote), so regenerate.
+            cache.delete(rawText);
         }
 
-        const entry = prepareSpeech(rawText);
-        cache.set(cacheKey, entry);
+        const entry = prepareSpeech(rawText).then((prepared) => ({
+            signature: activeSignature,
+            prepared,
+        }));
+        cache.set(rawText, entry);
         while (cache.size > speechCacheLimit) {
             const oldest = cache.keys().next().value;
             if (oldest === undefined) {
@@ -131,7 +152,8 @@ export function useSpeech({
             }
             cache.delete(oldest);
         }
-        return entry;
+
+        return (await entry).prepared;
     };
 
     const playPrepared = (
