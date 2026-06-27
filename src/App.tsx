@@ -125,6 +125,7 @@ function App() {
         if (
             target.closest(".chat-floating-toggle") ||
             target.closest(".preview-zoom-controls") ||
+            target.closest(".preview-sentence") ||
             target.closest("input") ||
             target.closest("label")
         ) {
