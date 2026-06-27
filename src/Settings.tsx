@@ -9,6 +9,7 @@ export type PersistedAppConfig = {
     ttsModel: string;
     ttsVoice: string;
     ttsMode: string;
+    preprocessTtsWithLlm: boolean;
     speechCacheLimit: number;
 };
 
@@ -20,6 +21,7 @@ export const DEFAULT_APP_CONFIG: PersistedAppConfig = {
     ttsModel: "gemini-2.5-flash-preview-tts",
     ttsVoice: "Kore",
     ttsMode: "remote",
+    preprocessTtsWithLlm: true,
     speechCacheLimit: 7,
 };
 
@@ -44,6 +46,10 @@ export function normalizeConfig(
         ttsModel: raw?.ttsModel ?? DEFAULT_APP_CONFIG.ttsModel,
         ttsVoice: raw?.ttsVoice ?? DEFAULT_APP_CONFIG.ttsVoice,
         ttsMode: raw?.ttsMode ?? DEFAULT_APP_CONFIG.ttsMode,
+        preprocessTtsWithLlm:
+            typeof raw?.preprocessTtsWithLlm === "boolean"
+                ? raw.preprocessTtsWithLlm
+                : DEFAULT_APP_CONFIG.preprocessTtsWithLlm,
         speechCacheLimit:
             typeof raw?.speechCacheLimit === "number" &&
             Number.isFinite(raw.speechCacheLimit)
@@ -126,6 +132,7 @@ export function SettingsPanel({
                 draft.ttsMode.trim().toLowerCase() === "local"
                     ? "local"
                     : "remote",
+            preprocessTtsWithLlm: Boolean(draft.preprocessTtsWithLlm),
             speechCacheLimit: Math.max(
                 1,
                 Math.min(100, Math.round(draft.speechCacheLimit) || 1),
@@ -268,6 +275,32 @@ export function SettingsPanel({
                             <span className="settings-hint">
                                 Local uses your operating system / browser
                                 voice. Remote uses the provider's TTS model.
+                            </span>
+                        </label>
+
+                        <label className="settings-field">
+                            <span className="settings-label">
+                                LLM sentence preprocessing
+                            </span>
+                            <select
+                                value={draft.preprocessTtsWithLlm ? "on" : "off"}
+                                onChange={(event) =>
+                                    update(
+                                        "preprocessTtsWithLlm",
+                                        event.target.value === "on",
+                                    )
+                                }
+                            >
+                                <option value="on">
+                                    On (edit sentence before TTS)
+                                </option>
+                                <option value="off">
+                                    Off (send sentence directly to TTS)
+                                </option>
+                            </select>
+                            <span className="settings-hint">
+                                When off, text is spoken as-is without LLM
+                                rewrite.
                             </span>
                         </label>
 

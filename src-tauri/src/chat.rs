@@ -112,6 +112,10 @@ pub(crate) async fn preprocess_tts_text(
         return Err("Text cannot be empty".to_string());
     }
 
+    if !config.preprocess_tts_with_llm {
+        return Ok(trimmed.to_string());
+    }
+
     let provider = config.provider.trim().to_ascii_lowercase();
     if provider != "openai-compatible" {
         return Ok(trimmed.to_string());

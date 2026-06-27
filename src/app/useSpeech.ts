@@ -43,10 +43,10 @@ export function useSpeech({
 
     const buildSpeechCacheKey = (rawText: string): string => {
         if (isLocalTts) {
-            return `local:${rawText}`;
+            return `local:${appConfig.preprocessTtsWithLlm ? "llm-on" : "llm-off"}:${rawText}`;
         }
 
-        return `remote:${appConfig.ttsModel}:${appConfig.ttsVoice}:${rawText}`;
+        return `remote:${appConfig.ttsModel}:${appConfig.ttsVoice}:${appConfig.preprocessTtsWithLlm ? "llm-on" : "llm-off"}:${rawText}`;
     };
 
     const stopPlayback = () => {
