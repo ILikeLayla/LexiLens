@@ -39,6 +39,15 @@ export function useSpeech({
         new Map(),
     );
     const speechCacheLimit = Math.max(1, appConfig.speechCacheLimit);
+    const isLocalTts = appConfig.ttsMode.trim().toLowerCase() === "local";
+
+    const buildSpeechCacheKey = (rawText: string): string => {
+        if (isLocalTts) {
+            return `local:${rawText}`;
+        }
+
+        return `remote:${appConfig.ttsModel}:${appConfig.ttsVoice}:${rawText}`;
+    };
 
     const stopPlayback = () => {
         if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -84,6 +93,10 @@ export function useSpeech({
             );
         }
 
+        if (isLocalTts) {
+            return { text, audio: null };
+        }
+
         let audio: SynthesizedSpeech | null = null;
         try {
             audio = await invoke<SynthesizedSpeech | null>(
@@ -102,14 +115,15 @@ export function useSpeech({
     };
 
     const getPreparedSpeech = (rawText: string): Promise<PreparedSpeech> => {
+        const cacheKey = buildSpeechCacheKey(rawText);
         const cache = speechCacheRef.current;
-        const existing = cache.get(rawText);
+        const existing = cache.get(cacheKey);
         if (existing) {
             return existing;
         }
 
         const entry = prepareSpeech(rawText);
-        cache.set(rawText, entry);
+        cache.set(cacheKey, entry);
         while (cache.size > speechCacheLimit) {
             const oldest = cache.keys().next().value;
             if (oldest === undefined) {
