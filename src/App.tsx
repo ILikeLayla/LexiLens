@@ -72,6 +72,27 @@ function App() {
     const [showSettings, setShowSettings] = useState(false);
     const [settingsError, setSettingsError] = useState<string | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [warningHidden, setWarningHidden] = useState(false);
+    const warningMessages = [appError, previewError, settingsError].filter(
+        (message): message is string => Boolean(message),
+    );
+    const warningSignature = warningMessages.join("\n");
+
+    useEffect(() => {
+        if (!warningMessages.length) {
+            setWarningHidden(false);
+            return;
+        }
+
+        setWarningHidden(false);
+        const timeoutId = window.setTimeout(() => {
+            setWarningHidden(true);
+        }, 5000);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [warningSignature]);
     const {
         activeSentenceKey,
         isReadingAll,
@@ -560,6 +581,28 @@ function App() {
 
     return (
         <main className="workspace">
+            {warningMessages.length && !warningHidden ? (
+                <div className="global-warning" role="status" aria-live="polite">
+                    <span className="global-warning-label">Warning</span>
+                    <div className="global-warning-messages">
+                        {warningMessages.map((message) => (
+                            <p key={message} className="global-warning-message">
+                                {message}
+                            </p>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        className="global-warning-dismiss"
+                        onClick={() => setWarningHidden(true)}
+                        aria-label="Dismiss warning"
+                        title="Dismiss warning"
+                    >
+                        ×
+                    </button>
+                </div>
+            ) : null}
+
             <FilesPanel
                 filesCollapsed={filesCollapsed}
                 currentFiles={currentFiles}
